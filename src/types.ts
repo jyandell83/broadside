@@ -8,6 +8,10 @@ export type Side = "port" | "starboard";
 export interface Wind {
   dir: number; // radians, the direction the wind blows TOWARD
   strength: number; // 0..1
+  targetDir: number; // the wind eases toward these between shifts
+  targetStrength: number;
+  nextShift: number; // seconds until a new target is picked
+  drift: Vec2; // total distance the air has moved (px); drives the on-water streaks
 }
 
 export interface Ship {
@@ -29,9 +33,15 @@ export interface Ship {
 export interface Projectile {
   pos: Vec2;
   vel: Vec2;
-  life: number; // seconds remaining
+  life: number; // seconds remaining; the ball falls into the sea at 0
+  maxLife: number;
   owner: number; // ship id
   damage: number;
+}
+
+export interface Splash {
+  pos: Vec2;
+  age: number; // seconds
 }
 
 export interface GameState {
@@ -39,6 +49,7 @@ export interface GameState {
   height: number;
   ships: Ship[];
   projectiles: Projectile[];
+  splashes: Splash[];
   wind: Wind;
   nextId: number;
   time: number;

@@ -42,10 +42,13 @@ Do not introduce libraries unless they provide substantial value.
 There is no test runner yet.
 
 ## Code layout
-- `src/main.ts` wires everything together. Its `update(dt)` function sets the order of systems each tick: input → enemy AI → ships → projectiles → collision.
+- `src/main.ts` wires everything together. Its `update(dt)` function sets the order of systems each tick: wind → input → enemy AI → ships → projectiles → splashes → collision.
 - `src/types.ts` holds the shared data shapes (`Ship`, `Projectile`, `GameState`). Entities are plain data objects; the systems in `src/systems/` are functions that read and mutate `GameState`.
 - `systems/loop.ts` runs a fixed 60 Hz simulation step and renders on every animation frame. Pass `dt` in seconds and keep gameplay code frame-rate independent.
-- Entities are removed by filtering: ships at `hp <= 0` in `updateShips`, projectiles at `life <= 0` in `updateProjectiles`. Collision "consumes" a projectile by setting `life = 0`.
+- Entities are removed by filtering:
+  - ships at `hp <= 0` in `updateShips`
+  - projectiles at `life <= 0` in `updateProjectiles`, which leaves a `Splash` (so `life` is effectively the shot's range)
+  - projectiles that hit a ship in `resolveCollisions`
 - `Input.wasPressed` is true only on the first tick a key goes down; `endFrame()` must stay at the end of `update`.
 - Tuning constants (speeds, reload time, damage) sit at the top of each system file.
 - Coordinates use screen space (y down); `heading` 0 points toward +x, and starboard is `heading + PI/2`.
@@ -54,6 +57,9 @@ There is no test runner yet.
   - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × trimEfficiency(trim)`.
   - Ships within 45° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
   - Rudder authority scales with speed.
+  - The wind shifts every 20–45s toward a new random direction and strength, and eases toward it over about 15s (`updateWind`).
+  - Ships and wind share one speed scale (`PX_PER_KNOT` in `wind.ts`). Use it for any speed shown to the player.
+  - `wind.drift` is added up each tick and moves the on-water streaks. Don't derive streak positions from `time × wind`, because every shift then makes them jump.
   - `offWind` and `sailEfficiency` on `Ship` are derived each tick in `updateShips`. Don't set them anywhere else.
 
 ## Working rules

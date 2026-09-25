@@ -18,6 +18,47 @@ const POLAR: [number, number][] = [
   [180, 0.75],
 ];
 
+/** One speed scale for ships and wind, so the readouts and on-screen motion agree. */
+export const PX_PER_KNOT = 5;
+/** Wind speed at strength 1. Ships top out around half the wind speed. */
+export const WIND_MAX_KNOTS = 20;
+
+// Wind shifts: every so often pick a new target, then ease toward it.
+const SHIFT_INTERVAL_MIN = 20; // seconds
+const SHIFT_INTERVAL_MAX = 45;
+const MAX_SHIFT = 40 * DEG; // largest single change of direction
+const STRENGTH_MIN = 0.5;
+const STRENGTH_MAX = 1;
+const SHIFT_EASE = 0.15; // per second; ~15s for a shift to mostly settle
+
+function rand(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+export function createWind(dir: number): Wind {
+  return { dir, strength: 0.8, targetDir: dir, targetStrength: 0.8, nextShift: rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX), drift: { x: 0, y: 0 } };
+}
+
+export function updateWind(wind: Wind, dt: number): void {
+  wind.nextShift -= dt;
+  if (wind.nextShift <= 0) {
+    wind.targetDir = wind.dir + rand(-MAX_SHIFT, MAX_SHIFT);
+    wind.targetStrength = rand(STRENGTH_MIN, STRENGTH_MAX);
+    wind.nextShift = rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX);
+  }
+  wind.dir += angleDiff(wind.targetDir, wind.dir) * SHIFT_EASE * dt;
+  wind.strength += (wind.targetStrength - wind.strength) * SHIFT_EASE * dt;
+
+  // Integrate, rather than computing time × current wind, so a shift changes only the current motion.
+  const speed = wind.strength * WIND_MAX_KNOTS * PX_PER_KNOT;
+  wind.drift.x += Math.cos(wind.dir) * speed * dt;
+  wind.drift.y += Math.sin(wind.dir) * speed * dt;
+}
+
+export function windKnots(wind: Wind): number {
+  return wind.strength * WIND_MAX_KNOTS;
+}
+
 /** Signed difference a - b, normalised to -PI..PI. */
 export function angleDiff(a: number, b: number): number {
   const d = a - b;

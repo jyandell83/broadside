@@ -1,7 +1,7 @@
 import type { GameState, Ship } from "../types";
 import { getPlayer } from "./state";
-import { MAX_SPEED } from "./ships";
-import { pointOfSailName, trimAdvice, windFromRelative } from "./wind";
+import { SPLASH_DURATION } from "./weapons";
+import { PX_PER_KNOT, pointOfSailName, trimAdvice, windFromRelative, windKnots } from "./wind";
 
 const COLORS = {
   water: "#0b1d2e",
@@ -20,7 +20,6 @@ const COLORS = {
 };
 
 const STREAK_COUNT = 40;
-const STREAK_SPEED = 60; // px/s at wind strength 1
 const STREAK_LENGTH = 24;
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
@@ -30,10 +29,14 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   drawWindStreaks(ctx, state);
   for (const ship of state.ships) drawShip(ctx, ship, state);
 
+  drawSplashes(ctx, state);
+
+  // Balls swell mid-flight to suggest a lobbed arc.
   ctx.fillStyle = COLORS.shot;
   for (const p of state.projectiles) {
+    const t = 1 - p.life / p.maxLife;
     ctx.beginPath();
-    ctx.arc(p.pos.x, p.pos.y, 2, 0, Math.PI * 2);
+    ctx.arc(p.pos.x, p.pos.y, 1.8 + 1.4 * Math.sin(Math.PI * t), 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -41,12 +44,11 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   drawWindIndicator(ctx, state);
 }
 
-/** Streaks drifting with the wind so its direction is always visible. Stateless: derived from time. */
+/** Streaks carried by the wind so its direction and speed are always visible. */
 function drawWindStreaks(ctx: CanvasRenderingContext2D, state: GameState): void {
-  const { dir, strength } = state.wind;
+  const { dir, drift } = state.wind;
   const dx = Math.cos(dir);
   const dy = Math.sin(dir);
-  const travel = state.time * STREAK_SPEED * strength;
   ctx.strokeStyle = COLORS.streak;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -54,13 +56,31 @@ function drawWindStreaks(ctx: CanvasRenderingContext2D, state: GameState): void 
     // Cheap pseudo-random but stable base positions.
     const bx = ((i * 7919) % 1000) / 1000;
     const by = ((i * 104729) % 1000) / 1000;
-    const drift = travel * (0.7 + ((i * 31) % 10) / 20);
-    const x = wrap(bx * state.width + dx * drift, state.width);
-    const y = wrap(by * state.height + dy * drift, state.height);
+    const gust = 0.85 + ((i * 31) % 10) / 30; // slight per-streak speed variation
+    const x = wrap(bx * state.width + drift.x * gust, state.width);
+    const y = wrap(by * state.height + drift.y * gust, state.height);
     ctx.moveTo(x, y);
     ctx.lineTo(x - dx * STREAK_LENGTH, y - dy * STREAK_LENGTH);
   }
   ctx.stroke();
+}
+
+function drawSplashes(ctx: CanvasRenderingContext2D, state: GameState): void {
+  ctx.lineWidth = 1.5;
+  for (const s of state.splashes) {
+    const t = s.age / SPLASH_DURATION;
+    ctx.strokeStyle = `rgba(220, 235, 255, ${0.8 * (1 - t)})`;
+    ctx.beginPath();
+    ctx.arc(s.pos.x, s.pos.y, 2 + t * 10, 0, Math.PI * 2);
+    ctx.stroke();
+    // White plume that collapses back into the sea.
+    if (t < 0.4) {
+      ctx.fillStyle = `rgba(240, 248, 255, ${0.9 * (1 - t / 0.4)})`;
+      ctx.beginPath();
+      ctx.arc(s.pos.x, s.pos.y, 3 * (1 - t / 0.4) + 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 function wrap(v: number, max: number): number {
@@ -123,7 +143,7 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const reload = (s: number) => (s > 0 ? s.toFixed(1) + "s" : "ready");
   const lines = [
     `${pointOfSailName(player.offWind)} · ${deg(player.offWind)}° off the wind`,
-    `Sails ${Math.round(player.sails * 100)}% · Trim ${deg(player.trim)}° · Speed ${Math.round((player.speed / MAX_SPEED) * 12)} kn`,
+    `Sails ${Math.round(player.sails * 100)}% · Trim ${deg(player.trim)}° · Speed ${Math.round(player.speed / PX_PER_KNOT)} kn`,
     `Port: ${reload(player.reload.port)}   Starboard: ${reload(player.reload.starboard)}`,
   ];
   lines.forEach((line, i) => ctx.fillText(line, 12, 46 + i * 20));
@@ -152,14 +172,15 @@ function drawWindIndicator(ctx: CanvasRenderingContext2D, state: GameState): voi
   // Arrow points the way the wind blows.
   const dx = Math.cos(state.wind.dir);
   const dy = Math.sin(state.wind.dir);
+  const len = r * (0.35 + 0.5 * state.wind.strength);
   ctx.strokeStyle = COLORS.hud;
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(cx - dx * r * 0.8, cy - dy * r * 0.8);
-  ctx.lineTo(cx + dx * r * 0.8, cy + dy * r * 0.8);
+  ctx.moveTo(cx - dx * len, cy - dy * len);
+  ctx.lineTo(cx + dx * len, cy + dy * len);
   ctx.stroke();
-  const hx = cx + dx * r * 0.8;
-  const hy = cy + dy * r * 0.8;
+  const hx = cx + dx * len;
+  const hy = cy + dy * len;
   ctx.fillStyle = COLORS.hud;
   ctx.beginPath();
   ctx.moveTo(hx, hy);
@@ -170,6 +191,6 @@ function drawWindIndicator(ctx: CanvasRenderingContext2D, state: GameState): voi
 
   ctx.font = "12px system-ui, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("WIND", cx, cy + r + 16);
+  ctx.fillText(`WIND ${Math.round(windKnots(state.wind))} kn`, cx, cy + r + 16);
   ctx.textAlign = "left";
 }

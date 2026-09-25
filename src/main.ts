@@ -4,7 +4,8 @@ import { startLoop } from "./systems/loop";
 import { render } from "./systems/render";
 import { adjustSails, steerShip, updateEnemyAI, updateShips } from "./systems/ships";
 import { createGameState, getPlayer } from "./systems/state";
-import { fireBroadside, updateProjectiles } from "./systems/weapons";
+import { fireBroadside, updateProjectiles, updateSplashes } from "./systems/weapons";
+import { updateWind } from "./systems/wind";
 import { resolveCollisions } from "./systems/collision";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
@@ -33,6 +34,8 @@ function update(dt: number): void {
     state = createGameState(state.width, state.height);
   }
 
+  updateWind(state.wind, dt);
+
   const player = getPlayer(state);
   if (player) {
     const turn = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0);
@@ -47,6 +50,7 @@ function update(dt: number): void {
   updateEnemyAI(state, dt, (ship, side) => fireBroadside(state, ship, side));
   updateShips(state, dt);
   updateProjectiles(state, dt);
+  updateSplashes(state, dt);
   resolveCollisions(state);
 
   input.endFrame();

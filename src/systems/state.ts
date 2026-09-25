@@ -1,5 +1,6 @@
 import type { GameState } from "../types";
 import { createShip } from "./ships";
+import { createWind } from "./wind";
 
 export function createGameState(width: number, height: number): GameState {
   const state: GameState = {
@@ -7,7 +8,8 @@ export function createGameState(width: number, height: number): GameState {
     height,
     ships: [],
     projectiles: [],
-    wind: { dir: Math.PI / 2, strength: 1 }, // blowing from the north (top of screen)
+    splashes: [],
+    wind: createWind(Math.PI / 2), // blowing from the north (top of screen)
     nextId: 1,
     time: 0,
   };

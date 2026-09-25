@@ -1,11 +1,12 @@
 import type { GameState, Ship, Vec2 } from "../types";
+import { SHOT_RANGE } from "./weapons";
 import { NO_GO, idealTrim, offWindAngle, polarFactor, trimEfficiency } from "./wind";
 
-export const MAX_SPEED = 120; // px/s at full sail, perfect trim, best point of sail
+export const MAX_SPEED = 60; // px/s at full sail, perfect trim, best point of sail
 const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
 const DRAG = 0.4; // how quickly speed bleeds off when the target is lower
 const IRONS_DRAG = 0.9; // extra-fast slowdown when pointed into the wind
-const TURN_RATE = 1.4; // rad/s at full speed
+const TURN_RATE = 1.0; // rad/s at full speed
 const MIN_STEERAGE = 0.25; // fraction of turn rate available when dead in the water
 const SAIL_RATE = 0.8; // sails set/furled per second
 const TRIM_RATE = Math.PI / 3; // rad/s the sheets can be hauled or eased
@@ -75,7 +76,7 @@ export function updateEnemyAI(state: GameState, dt: number, fire: (ship: Ship, s
     ship.sails = 1;
     steerShip(ship, 0.4, dt);
     autoTrim(state, ship);
-    if (!player) continue;
+    if (!player || Math.hypot(player.pos.x - ship.pos.x, player.pos.y - ship.pos.y) > SHOT_RANGE) continue;
     const angle = Math.atan2(player.pos.y - ship.pos.y, player.pos.x - ship.pos.x) - ship.heading;
     const rel = Math.atan2(Math.sin(angle), Math.cos(angle)); // normalise to -PI..PI
     if (Math.abs(rel - Math.PI / 2) < 0.2) fire(ship, "starboard");
