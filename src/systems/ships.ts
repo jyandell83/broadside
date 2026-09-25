@@ -7,7 +7,12 @@ const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
 const DRAG = 0.4; // how quickly speed bleeds off when the target is lower
 const IRONS_DRAG = 0.9; // extra-fast slowdown when pointed into the wind
 const TURN_RATE = 1.0; // rad/s at full speed
-const MIN_STEERAGE = 0.6; // fraction of turn rate available when dead in the water
+// Arcade tuning: rudder needs way on, but a nearly stopped ship can pivot to recover.
+const MIN_STEERAGE = 0.6; // fraction of turn rate from the rudder alone at zero speed
+const LOW_SPEED_STEERAGE = 1.0; // pivot boost when barely moving, so a bad heading is recoverable
+const PIVOT_FULL_BELOW = 0.2; // fraction of MAX_SPEED: full pivot boost below this
+const PIVOT_GONE_ABOVE = 0.4; // ...fading to nothing by this
+const MIN_SPEED = 5; // px/s (~1 kn); ships never fully stop, even in irons
 const SAIL_RATE = 0.8; // sails set/furled per second
 const BRACE_RATE = Math.PI / 2; // rad/s the crew can swing the yards
 
@@ -26,12 +31,17 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     hp: 100,
     maxHp: 100,
     reload: { port: 0, starboard: 0 },
+    wakeDistance: 0,
   };
 }
 
-/** turn: -1 (to port) .. 1 (to starboard). Rudder only bites with way on. */
+/** turn: -1 (to port) .. 1 (to starboard). */
 export function steerShip(ship: Ship, turn: number, dt: number): void {
-  const steerage = MIN_STEERAGE + (1 - MIN_STEERAGE) * Math.min(1, ship.speed / MAX_SPEED);
+  const r = Math.min(1, ship.speed / MAX_SPEED);
+  const rudder = MIN_STEERAGE + (1 - MIN_STEERAGE) * r;
+  const fade = (PIVOT_GONE_ABOVE - r) / (PIVOT_GONE_ABOVE - PIVOT_FULL_BELOW);
+  const pivot = LOW_SPEED_STEERAGE * Math.min(1, Math.max(0, fade));
+  const steerage = Math.max(rudder, pivot);
   ship.heading += turn * TURN_RATE * steerage * dt;
 }
 
@@ -54,13 +64,14 @@ export function updateShips(state: GameState, dt: number): void {
     const target = MAX_SPEED * state.wind.strength * ship.sails * polarFactor(ship.offWind) * ship.sailEfficiency;
     const rate = target > ship.speed ? ACCEL : ship.offWind < NO_GO ? IRONS_DRAG : DRAG;
     ship.speed += (target - ship.speed) * rate * dt;
+    ship.speed = Math.max(MIN_SPEED, ship.speed);
 
     ship.pos.x += Math.cos(ship.heading) * ship.speed * dt;
     ship.pos.y += Math.sin(ship.heading) * ship.speed * dt;
 
-    // Wrap around the screen edges.
-    ship.pos.x = (ship.pos.x + state.width) % state.width;
-    ship.pos.y = (ship.pos.y + state.height) % state.height;
+    // Keep ships inside the world.
+    ship.pos.x = Math.min(state.world.width - ship.radius, Math.max(ship.radius, ship.pos.x));
+    ship.pos.y = Math.min(state.world.height - ship.radius, Math.max(ship.radius, ship.pos.y));
 
     ship.reload.port = Math.max(0, ship.reload.port - dt);
     ship.reload.starboard = Math.max(0, ship.reload.starboard - dt);

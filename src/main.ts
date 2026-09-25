@@ -7,6 +7,8 @@ import { createGameState, getPlayer } from "./systems/state";
 import { fireBroadside, updateProjectiles, updateSplashes } from "./systems/weapons";
 import { updateWind } from "./systems/wind";
 import { resolveCollisions } from "./systems/collision";
+import { updateCamera } from "./systems/camera";
+import { updateWake } from "./systems/wake";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const ctx = canvas?.getContext("2d");
@@ -21,8 +23,8 @@ function resize(): void {
   canvas.width = Math.floor(window.innerWidth * dpr);
   canvas.height = Math.floor(window.innerHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  state.width = window.innerWidth;
-  state.height = window.innerHeight;
+  state.viewport.width = window.innerWidth;
+  state.viewport.height = window.innerHeight;
 }
 window.addEventListener("resize", resize);
 resize();
@@ -31,7 +33,7 @@ function update(dt: number): void {
   state.time += dt;
 
   if (input.wasPressed("KeyR")) {
-    state = createGameState(state.width, state.height);
+    state = createGameState(state.viewport.width, state.viewport.height);
   }
 
   updateWind(state.wind, dt);
@@ -52,6 +54,8 @@ function update(dt: number): void {
   updateProjectiles(state, dt);
   updateSplashes(state, dt);
   resolveCollisions(state);
+  updateWake(state, dt);
+  updateCamera(state, dt);
 
   input.endFrame();
 }

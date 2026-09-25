@@ -1,10 +1,17 @@
 import type { GameState, Ship } from "../types";
 import { getPlayer } from "./state";
 import { SPLASH_DURATION } from "./weapons";
+import { worldToScreen } from "./camera";
+import { MAX_SPEED } from "./ships";
 import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
 const COLORS = {
   water: "#0b1d2e",
+  outside: "#060f18", // beyond the world edge
+  worldEdge: "rgba(200, 225, 255, 0.18)",
+  wave: [160, 200, 235] as const, // rgb for crests; alpha varies per mark
+  foam: [225, 238, 250] as const, // rgb for wake, flecks and bow wave
+  offscreenEdge: "rgba(255, 255, 255, 0.5)",
   streak: "rgba(200, 225, 255, 0.12)",
   // Hulls are darker than the sails so the sails always read against them.
   player: "#9c7447",
@@ -27,9 +34,22 @@ const STREAK_COUNT = 40;
 const STREAK_LENGTH = 24;
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
-  ctx.fillStyle = COLORS.water;
-  ctx.fillRect(0, 0, state.width, state.height);
+  const { viewport, camera, world } = state;
+  ctx.fillStyle = COLORS.outside;
+  ctx.fillRect(0, 0, viewport.width, viewport.height);
 
+  // World space: everything positioned in world px, shifted so the camera is centred.
+  ctx.save();
+  ctx.translate(viewport.width / 2 - camera.x, viewport.height / 2 - camera.y);
+
+  ctx.fillStyle = COLORS.water;
+  ctx.fillRect(0, 0, world.width, world.height);
+  drawWaveMarks(ctx, state);
+  ctx.strokeStyle = COLORS.worldEdge;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, world.width, world.height);
+
+  drawWake(ctx, state);
   drawWindStreaks(ctx, state);
   for (const ship of state.ships) drawShip(ctx, ship, state);
 
@@ -43,14 +63,90 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.arc(p.pos.x, p.pos.y, 1.8 + 1.4 * Math.sin(Math.PI * t), 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 
+  // Screen space.
+  drawOffscreenIndicators(ctx, state);
   drawHud(ctx, state);
   drawWindIndicator(ctx, state);
+}
+
+/** Top-left corner of the view in world coordinates. */
+function viewOrigin(state: GameState): { left: number; top: number } {
+  return {
+    left: state.camera.x - state.viewport.width / 2,
+    top: state.camera.y - state.viewport.height / 2,
+  };
+}
+
+const WAVE_CELL = 90; // px grid the sea texture is scattered on
+
+/**
+ * Sea texture fixed to world positions: small crests of varied size plus the odd fleck of foam.
+ * The marks never move; each slowly brightens and fades so the sea doesn't look printed on.
+ * This is what lets the player read their own speed while the camera follows them.
+ */
+function drawWaveMarks(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const { left, top } = viewOrigin(state);
+  const x0 = Math.max(0, Math.floor(left / WAVE_CELL));
+  const y0 = Math.max(0, Math.floor(top / WAVE_CELL));
+  const x1 = Math.min(Math.ceil(state.world.width / WAVE_CELL), Math.ceil((left + state.viewport.width) / WAVE_CELL));
+  const y1 = Math.min(Math.ceil(state.world.height / WAVE_CELL), Math.ceil((top + state.viewport.height) / WAVE_CELL));
+  const [wr, wg, wb] = COLORS.wave;
+  const [fr, fg, fb] = COLORS.foam;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  for (let ix = x0; ix < x1; ix++) {
+    for (let iy = y0; iy < y1; iy++) {
+      const x = (ix + 0.1 + 0.8 * hash(ix, iy, 1)) * WAVE_CELL;
+      const y = (iy + 0.1 + 0.8 * hash(ix, iy, 2)) * WAVE_CELL;
+      const shimmer = 0.6 + 0.4 * Math.sin(state.time * (0.4 + hash(ix, iy, 3) * 0.5) + hash(ix, iy, 4) * 6.28);
+
+      // A shallow crest, 4–10px wide.
+      const w = 4 + 6 * hash(ix, iy, 5);
+      ctx.strokeStyle = `rgba(${wr}, ${wg}, ${wb}, ${0.17 * shimmer})`;
+      ctx.beginPath();
+      ctx.moveTo(x - w, y);
+      ctx.quadraticCurveTo(x, y - w * 0.45, x + w, y);
+      ctx.stroke();
+
+      // Occasional fleck of foam near the crest.
+      if (hash(ix, iy, 6) < 0.35) {
+        ctx.fillStyle = `rgba(${fr}, ${fg}, ${fb}, ${0.14 * shimmer})`;
+        ctx.beginPath();
+        ctx.arc(x + (hash(ix, iy, 7) - 0.5) * 16, y + 4 + hash(ix, iy, 8) * 6, 1 + hash(ix, iy, 9), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+/** Foam behind ships: spreads a little and fades. */
+function drawWake(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const [fr, fg, fb] = COLORS.foam;
+  for (const p of state.wake) {
+    const t = p.age / p.life;
+    const alpha = p.strength * (1 - t) * (1 - t);
+    if (alpha < 0.01) continue;
+    ctx.fillStyle = `rgba(${fr}, ${fg}, ${fb}, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.pos.x, p.pos.y, p.size * (1 + 1.5 * t), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Stable pseudo-random 0..1 for a grid cell. */
+function hash(ix: number, iy: number, salt: number): number {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(salt, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
 /** Streaks carried by the wind so its direction and speed are always visible. */
 function drawWindStreaks(ctx: CanvasRenderingContext2D, state: GameState): void {
   const { dir, drift } = state.wind;
+  const { width, height } = state.viewport;
+  const { left, top } = viewOrigin(state);
   const dx = Math.cos(dir);
   const dy = Math.sin(dir);
   ctx.strokeStyle = COLORS.streak;
@@ -61,8 +157,9 @@ function drawWindStreaks(ctx: CanvasRenderingContext2D, state: GameState): void 
     const bx = ((i * 7919) % 1000) / 1000;
     const by = ((i * 104729) % 1000) / 1000;
     const gust = 0.85 + ((i * 31) % 10) / 30; // slight per-streak speed variation
-    const x = wrap(bx * state.width + drift.x * gust, state.width);
-    const y = wrap(by * state.height + drift.y * gust, state.height);
+    // Tile the streaks over the viewport, offset by the camera so they move with the air, not the screen.
+    const x = left + wrap(bx * width + drift.x * gust - left, width);
+    const y = top + wrap(by * height + drift.y * gust - top, height);
     ctx.moveTo(x, y);
     ctx.lineTo(x - dx * STREAK_LENGTH, y - dy * STREAK_LENGTH);
   }
@@ -95,6 +192,7 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.save();
   ctx.translate(ship.pos.x, ship.pos.y);
   ctx.rotate(ship.heading);
+  drawBowWave(ctx, ship);
   ctx.fillStyle = ship.team === "player" ? COLORS.player : COLORS.enemy;
   ctx.beginPath();
   ctx.moveTo(22, 0);
@@ -116,6 +214,24 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.fillRect(x, y, w, 4);
   ctx.fillStyle = COLORS.hpFront;
   ctx.fillRect(x, y, w * Math.max(0, ship.hp / ship.maxHp), 4);
+}
+
+/** Foam curling off the bow; longer and brighter the faster the ship goes. Ship-local coords. */
+function drawBowWave(ctx: CanvasRenderingContext2D, ship: Ship): void {
+  const s = Math.min(1, ship.speed / MAX_SPEED);
+  if (s < 0.08) return;
+  const [fr, fg, fb] = COLORS.foam;
+  ctx.strokeStyle = `rgba(${fr}, ${fg}, ${fb}, ${0.15 + 0.45 * s})`;
+  ctx.lineWidth = 1 + s;
+  ctx.lineCap = "round";
+  const reach = 6 + 14 * s; // how far aft the bow wave trails
+  const flare = 8 + 6 * s; // how far it spreads to the side
+  ctx.beginPath();
+  for (const side of [-1, 1]) {
+    ctx.moveTo(22, 0);
+    ctx.quadraticCurveTo(14, side * 8, 14 - reach, side * flare);
+  }
+  ctx.stroke();
 }
 
 // Mast positions along the hull (ship-local x) and half-length of each yard.
@@ -173,6 +289,44 @@ function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState):
   }
 }
 
+const INDICATOR_INSET = 22; // px from the screen edge
+const INDICATOR_SIZE = 9;
+
+/** A small arrow at the screen edge pointing toward each off-screen enemy. */
+function drawOffscreenIndicators(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const { width, height } = state.viewport;
+  const cx = width / 2;
+  const cy = height / 2;
+  for (const ship of state.ships) {
+    if (ship.team !== "enemy") continue;
+    const p = worldToScreen(state, ship.pos);
+    const r = ship.radius;
+    if (p.x > -r && p.x < width + r && p.y > -r && p.y < height + r) continue;
+
+    // Slide from the screen centre toward the ship until hitting the inset border.
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const t = Math.min((cx - INDICATOR_INSET) / Math.abs(dx || 1e-6), (cy - INDICATOR_INSET) / Math.abs(dy || 1e-6));
+    const angle = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.translate(cx + dx * t, cy + dy * t);
+    ctx.rotate(angle);
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = COLORS.enemy;
+    ctx.strokeStyle = COLORS.offscreenEdge;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(INDICATOR_SIZE, 0);
+    ctx.lineTo(-INDICATOR_SIZE * 0.7, INDICATOR_SIZE * 0.7);
+    ctx.lineTo(-INDICATOR_SIZE * 0.7, -INDICATOR_SIZE * 0.7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const player = getPlayer(state);
   ctx.font = "14px system-ui, sans-serif";
@@ -208,7 +362,7 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
 
 function drawWindIndicator(ctx: CanvasRenderingContext2D, state: GameState): void {
   const r = 26;
-  const cx = state.width - r - 20;
+  const cx = state.viewport.width - r - 20;
   const cy = r + 20;
   ctx.strokeStyle = COLORS.hudDim;
   ctx.lineWidth = 1.5;
