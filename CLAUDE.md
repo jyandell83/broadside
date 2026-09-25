@@ -72,7 +72,11 @@ There is no test runner yet.
     - Everything else (docking, prompts, the panel, off-screen markers) is shared, so a new port is one entry here plus its island.
     - Docking needs furled sails and a near-stop, using the existing sail and speed values (no separate docking state). `dockablePort` means "inside the docking area"; `dockStatus` adds readiness: `"sails"` (sails still set), `"slowing"` (furled, faster than `DOCK_MAX_SPEED`, 3 kn), or `"ready"`. The prompt and the F key read `dockStatus`.
     - F docks when ready and sets sail when docked.
-    - `ship.docked` disables steering, sails and firing, and eases the ship into its berth.
+    - `ship.docked` (a `Docking`) disables steering, sails and firing from the moment docking starts.
+    - The berth is across the pier's T-head, parallel to the shore. `dock` picks the mooring heading (either way along the shore) that needs the least turning.
+    - `updateDocking` in `ships.ts` then plans a cubic curve from the ship's position and heading into the berth. The ship moves forward along it facing along it, advancing each tick only as far as `DOCK_TURN_RATE` lets the heading follow: easing up, cruising at about 5 kn, and easing to a stop.
+    - `phase` is `"approach"` until the ship reaches the berth, then `"moored"`. The Port panel opens and Set Sail works only when moored.
+    - Steering toward the berth by feedback circled instead of arriving (the docking area is only a few turning circles across), which is why the path is planned.
     - Enemy AI won't fire at a docked player.
   - The Port screen is a DOM panel (`src/ui/portPanel.ts`, styled in `style.css`), not canvas. `portPanel.sync(state)` runs each tick and shows it while the player is docked, reading `ship.cargo` directly. Put future menu-style UI (trading and so on) in the DOM too.
   - Loot: `updateShips` returns the wrecks it removed this tick, and `main.ts` passes enemy wrecks to `dropWreckCargo`. Loot therefore spawns where the wreck finally went down, and is tied to the removal, not the sinking animation.

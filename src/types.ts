@@ -44,7 +44,7 @@ export interface Ship {
   smokeTimer: number; // seconds until the next damage smoke puff
   pendingShots: PendingShot[]; // guns of a broadside still waiting to fire (ripple fire)
   cargo: Partial<Record<CargoId, number>>; // the cargo hold: units of each cargo type
-  docked: { portId: string; sailsBefore: number } | null; // alongside a port's pier; can't sail or fire
+  docked: Docking | null; // coming alongside or moored at a port; can't sail or fire
 }
 
 /**
@@ -57,6 +57,19 @@ export interface Island {
   center: Vec2;
   radius: number;
   harmonics: readonly (readonly [k: number, amp: number, phase: number])[];
+}
+
+/** A ship docking at, or moored in, a port. Set by ports.dock; the maneuver runs in ships.updateDocking. */
+export interface Docking {
+  portId: string;
+  sailsBefore: number; // restored on setting sail
+  heading: number; // the ship moors facing this way, along the shore
+  // "approach": gliding along a planned curve into the berth; "moored": still at the berth,
+  // the Port panel opens and Set Sail is allowed.
+  phase: "approach" | "moored";
+  path: Vec2[] | null; // the approach curve, sampled; planned on the first tick
+  pathLength: number[]; // distance along the path at each sample
+  progress: number; // px travelled along the path
 }
 
 /** How a port looks, so each has its own identity. */
@@ -76,8 +89,7 @@ export interface Port {
   style: PortStyle;
   pierBase: Vec2; // where the pier meets the shore
   pierEnd: Vec2;
-  berth: Vec2; // where a docked ship lies, alongside the pier
-  berthHeading: number; // docked ships lie bow-out, ready to leave
+  berth: Vec2; // where a docked ship lies: across the end of the pier, parallel to the shore
   dockZone: { center: Vec2; radius: number }; // enter this to be offered "Dock"
 }
 

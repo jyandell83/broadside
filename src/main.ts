@@ -47,10 +47,10 @@ function update(dt: number): void {
   updateWind(state.wind, dt);
 
   const player = getPlayer(state);
-  // F docks once the ship is stopped in a port's docking area, and sets sail again when docked.
+  // F docks once the ship is stopped in a port's docking area, and sets sail again once moored.
   if (player && input.wasPressed("KeyF")) {
     const approach = dockStatus(state, player);
-    if (player.docked) setSail(player);
+    if (player.docked) setSail(player); // ignored while still coming alongside
     else if (approach?.status === "ready") dock(player, approach.port);
   }
   if (player && !player.docked) {

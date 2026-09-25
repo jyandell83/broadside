@@ -64,10 +64,10 @@ export function createPortPanel(onSetSail: () => void): { sync: (state: GameStat
   }
 
   return {
-    /** Call every tick: shows the panel while the player is docked, hides it otherwise. */
+    /** Call every tick: shows the panel once the player is moored in port, hides it otherwise. */
     sync(state) {
       const docked = getPlayer(state)?.docked;
-      const portId = docked ? docked.portId : null;
+      const portId = docked?.phase === "moored" ? docked.portId : null;
       if (portId === shownFor) return;
       shownFor = portId;
       if (portId) fill(state, portId);

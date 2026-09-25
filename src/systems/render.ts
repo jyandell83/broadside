@@ -571,6 +571,18 @@ function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): 
   ctx.lineWidth = 1;
   ctx.stroke();
   const len = Math.hypot(port.pierEnd.x - port.pierBase.x, port.pierEnd.y - port.pierBase.y);
+  // T-head across the pier's end, where ships moor alongside.
+  const head = 20;
+  ctx.fillStyle = COLORS.pier;
+  ctx.beginPath();
+  ctx.moveTo(port.pierEnd.x + sx * head, port.pierEnd.y + sy * head);
+  ctx.lineTo(port.pierEnd.x + sx * head - ux * 7, port.pierEnd.y + sy * head - uy * 7);
+  ctx.lineTo(port.pierEnd.x - sx * head - ux * 7, port.pierEnd.y - sy * head - uy * 7);
+  ctx.lineTo(port.pierEnd.x - sx * head, port.pierEnd.y - sy * head);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(40, 25, 12, 0.55)";
+  ctx.stroke();
   ctx.fillStyle = COLORS.yard;
   for (let d = 12; d <= len; d += 12) {
     for (const side of [-1, 1]) {
@@ -666,7 +678,8 @@ function drawPortPrompt(ctx: CanvasRenderingContext2D, state: GameState): void {
   if (!player || player.sinkAge !== null) return;
   let text: string | null = null;
   if (player.docked) {
-    text = `Docked at ${getPort(state, player.docked.portId)?.name ?? "port"}`;
+    const name = getPort(state, player.docked.portId)?.name ?? "port";
+    text = player.docked.phase === "moored" ? `Docked at ${name}` : `Coming alongside ${name}…`;
   } else {
     // Approach → furl sails → ship slows → Dock becomes available.
     const approach = dockStatus(state, player);
