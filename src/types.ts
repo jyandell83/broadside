@@ -1,4 +1,5 @@
 import type { CargoId } from "./systems/cargo";
+import type { SupplyStock } from "./systems/supplies";
 
 export interface Vec2 {
   x: number;
@@ -90,6 +91,7 @@ export interface Port {
   islandId: string;
   angle: number; // direction from the island centre the harbour faces (radians)
   style: PortStyle;
+  supplies: SupplyStock; // repair supplies in stock; this game's copy, so it can change in play
   pierBase: Vec2; // where the pier meets the shore
   pierEnd: Vec2;
   berth: Vec2; // where a docked ship lies: across the end of the pier, parallel to the shore

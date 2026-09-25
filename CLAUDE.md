@@ -74,6 +74,8 @@ There is no test runner yet.
     - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
   - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that.
     - Each port has a `style` (roof and flag colours, an optional lighthouse on any blob's coast) for its visual identity.
+    - Each port def has a `supplies` stock of repair supplies (`systems/supplies.ts`: Timber, Oakum, Pitch, Rope, Sailcloth, Iron). `createPorts` copies it onto the port, so a game can change a port's stock without touching the defs. The Port panel lists it in a Repair Supplies table (Item | Available); add columns there for prices or buy/sell.
+    - Supplies are separate from cargo (`CARGO`) so loot never drops them.
     - Future per-port data (prices, services) goes on the def.
     - Everything else (docking, prompts, the panel, off-screen markers) is shared, so a new port is one entry here plus its island.
     - Docking needs furled sails and a near-stop, using the existing sail and speed values (no separate docking state). `dockablePort` means "inside the docking area"; `dockStatus` adds readiness: `"sails"` (sails still set), `"slowing"` (furled, faster than `DOCK_MAX_SPEED`, 3 kn), or `"ready"`. The prompt and the F key read `dockStatus`.
