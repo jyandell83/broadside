@@ -10,6 +10,7 @@ import { resolveCollisions } from "./systems/collision";
 import { updateCamera } from "./systems/camera";
 import { updateWake } from "./systems/wake";
 import { updateEffects } from "./systems/effects";
+import { dropWreckCargo, updateLoot } from "./systems/loot";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const ctx = canvas?.getContext("2d");
@@ -51,13 +52,16 @@ function update(dt: number): void {
   }
 
   updateEnemyAI(state, dt, (ship, side) => fireBroadside(ship, side));
-  updateShips(state, dt);
+  for (const wreck of updateShips(state, dt)) {
+    if (wreck.team === "enemy") dropWreckCargo(state, wreck);
+  }
   updateGuns(state, dt);
   updateProjectiles(state, dt);
   updateSplashes(state, dt);
   resolveCollisions(state);
   updateWake(state, dt);
   updateEffects(state, dt);
+  updateLoot(state, dt);
   updateCamera(state, dt);
 
   input.endFrame();

@@ -1,3 +1,5 @@
+import type { CargoId } from "./systems/cargo";
+
 export interface Vec2 {
   x: number;
   y: number;
@@ -37,6 +39,26 @@ export interface Ship {
   sinkSpin: number; // rad/s the wreck slowly turns while sinking
   smokeTimer: number; // seconds until the next damage smoke puff
   pendingShots: PendingShot[]; // guns of a broadside still waiting to fire (ripple fire)
+  cargo: Partial<Record<CargoId, number>>; // the cargo hold: units of each cargo type
+}
+
+/** A piece of cargo floating where a ship went down. Not a collider: only the player's pickup check reads it. */
+export interface FloatingLoot {
+  cargo: CargoId;
+  qty: number;
+  pos: Vec2;
+  vel: Vec2; // initial scatter; settles into a slow downwind drift
+  age: number;
+  phase: number; // offsets the bobbing so pieces don't move in unison
+}
+
+/** Visual only: a collected piece flying into the ship, with its "+ Silk" label. */
+export interface LootPickup {
+  cargo: CargoId;
+  qty: number;
+  from: Vec2;
+  shipId: number;
+  age: number;
 }
 
 export interface PendingShot {
@@ -99,6 +121,8 @@ export interface GameState {
   splashes: Splash[];
   wake: WakeParticle[];
   particles: Particle[];
+  loot: FloatingLoot[];
+  lootPickups: LootPickup[];
   shake: number; // camera shake "trauma", 0..1; decays over time
   wind: Wind;
   nextId: number;

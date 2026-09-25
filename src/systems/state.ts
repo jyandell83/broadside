@@ -21,6 +21,8 @@ export function createGameState(viewportWidth: number, viewportHeight: number): 
     splashes: [],
     wake: [],
     particles: [],
+    loot: [],
+    lootPickups: [],
     shake: 0,
     wind: createWind(Math.PI / 2), // blowing from the north (top of the world)
     nextId: 1,

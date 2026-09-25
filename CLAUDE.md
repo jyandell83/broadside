@@ -42,7 +42,7 @@ Do not introduce libraries unless they provide substantial value.
 There is no test runner yet.
 
 ## Code layout
-- `src/main.ts` wires everything together. Its `update(dt)` function sets the order of systems each tick: wind → input → enemy AI → ships → guns → projectiles → splashes → collision → wake → effects → camera.
+- `src/main.ts` wires everything together. Its `update(dt)` function sets the order of systems each tick: wind → input → enemy AI → ships → guns → projectiles → splashes → collision → wake → effects → loot → camera.
 - `src/types.ts` holds the shared data shapes (`Ship`, `Projectile`, `GameState`). Entities are plain data objects; the systems in `src/systems/` are functions that read and mutate `GameState`.
 - `systems/loop.ts` runs a fixed 60 Hz simulation step and renders on every animation frame. Pass `dt` in seconds and keep gameplay code frame-rate independent.
 - Entities are removed by filtering:
@@ -61,6 +61,10 @@ There is no test runner yet.
   - `render` draws the world inside a camera translate, then draws the HUD and the off-screen enemy arrows in screen space. Use `worldToScreen` to convert between the two.
   - The wake (`systems/wake.ts`, `state.wake`) and the bow wave are purely visual and scale with speed; they never feed back into gameplay.
   - Broadsides ripple-fire. `fireBroadside` starts the reload and queues `ship.pendingShots`; `updateGuns` fires each gun from the ship's current position at its gun port, with a `muzzleBlast` (flash, gun smoke, slight recoil). A sinking ship drops its queued shots.
+  - Loot: `updateShips` returns the wrecks it removed this tick, and `main.ts` passes enemy wrecks to `dropWreckCargo`. Loot therefore spawns where the wreck finally went down, and is tied to the removal, not the sinking animation.
+    - `state.loot` is not a collider. Only the player's pickup check in `updateLoot` reads it, by sailing within `radius + PICKUP_REACH`.
+    - Collected cargo goes into `ship.cargo`, the hold. The Cargo Hold panel is drawn bottom-left.
+    - Cargo types are data in `systems/cargo.ts` (`CARGO`). Add types or properties (value, weight, rarity) there.
   - `systems/effects.ts` handles visual-only combat feedback (`state.particles`, `state.shake`, `ship.jolt`/`joltSpin`): impact flash, splinters and smoke via `cannonImpact` (called from collision), damage smoke and fires below 70% HP, sinking bubbles and wreckage, and camera shake. Jolt and shake are offsets applied only when drawing; never feed them back into positions or aim.
   - Wave marks are fixed to world positions so the player's motion is visible. The wind streaks tile the viewport but are offset by the camera so they move with the air.
 - Movement is wind-driven (age of sail), with no throttle. `systems/wind.ts` holds the sailing model:

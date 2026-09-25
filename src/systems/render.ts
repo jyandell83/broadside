@@ -4,6 +4,8 @@ import { SPLASH_DURATION } from "./weapons";
 import { worldToScreen } from "./camera";
 import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
 import { SHIP_SCALE } from "./hull";
+import { CARGO, CARGO_IDS, cargoText, type CargoDef } from "./cargo";
+import { PICKUP_FX_DURATION, SURFACE_TIME } from "./loot";
 import { MAX_SPEED } from "./ships";
 import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
@@ -57,6 +59,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   drawWake(ctx, state);
   drawParticles(ctx, state, "water");
+  drawLoot(ctx, state);
   drawWindStreaks(ctx, state);
   for (const ship of state.ships) drawShip(ctx, ship, state);
 
@@ -71,12 +74,14 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.fill();
   }
   drawParticles(ctx, state, "air");
+  drawLootPickups(ctx, state);
   ctx.restore();
 
   // Screen space.
   drawOffscreenIndicators(ctx, state);
   drawHud(ctx, state);
   drawWindIndicator(ctx, state);
+  drawCargoHold(ctx, state);
 }
 
 /** Top-left corner of the view in world coordinates. */
@@ -424,6 +429,198 @@ function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState):
     ctx.lineTo(x2, y2);
     ctx.stroke();
   }
+}
+
+/**
+ * A piece of cargo as a small container, centred on (0, 0), about 12px across at scale 1.
+ * Used both for loot in the water and for icons in the Cargo Hold panel.
+ */
+function drawCargoIcon(ctx: CanvasRenderingContext2D, def: CargoDef): void {
+  const dark = "rgba(30, 20, 10, 0.75)";
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = dark;
+  ctx.fillStyle = def.color;
+  switch (def.shape) {
+    case "chest": // small sea chest with a coin-gold lid band
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(-5, -3.5, 10, 7);
+      ctx.strokeRect(-5, -3.5, 10, 7);
+      ctx.fillStyle = def.color;
+      ctx.fillRect(-5, -1, 10, 1.6);
+      ctx.fillRect(-1, -1.5, 2, 2.6);
+      break;
+    case "bolt": // rolled bolt of cloth
+      ctx.beginPath();
+      ctx.roundRect(-5.5, -2.5, 11, 5, 2.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.beginPath();
+      ctx.moveTo(-2, -2.5);
+      ctx.lineTo(-2, 2.5);
+      ctx.moveTo(2, -2.5);
+      ctx.lineTo(2, 2.5);
+      ctx.stroke();
+      break;
+    case "sack": // tied sack
+      ctx.beginPath();
+      ctx.ellipse(0, 0.8, 4.5, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-1.5, -3);
+      ctx.lineTo(0, -4.5);
+      ctx.lineTo(1.5, -3);
+      ctx.stroke();
+      break;
+    case "barrel":
+    case "keg": {
+      const w = def.shape === "keg" ? 4 : 5;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = def.shape === "keg" ? "#9a8f80" : dark; // hoops
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.45, -3.2);
+      ctx.lineTo(-w * 0.45, 3.2);
+      ctx.moveTo(w * 0.45, -3.2);
+      ctx.lineTo(w * 0.45, 3.2);
+      ctx.stroke();
+      break;
+    }
+    case "crate":
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.strokeRect(-4, -4, 8, 8);
+      ctx.beginPath();
+      ctx.moveTo(-4, -4);
+      ctx.lineTo(4, 4);
+      ctx.moveTo(4, -4);
+      ctx.lineTo(-4, 4);
+      ctx.stroke();
+      break;
+  }
+}
+
+const LOOT_SCALE = 1.6;
+
+/** Floating cargo: bobs and sways gently, with a faint glint so it reads as collectable. */
+function drawLoot(ctx: CanvasRenderingContext2D, state: GameState): void {
+  for (const item of state.loot) {
+    if (item.age < 0) continue; // not surfaced yet
+    const surfacing = Math.min(1, item.age / SURFACE_TIME);
+    const pop = 1 - (1 - surfacing) * (1 - surfacing); // ease out
+    const bob = Math.sin(state.time * 2.2 + item.phase);
+
+    // Foam ring as it breaks the surface.
+    if (surfacing < 1) {
+      ctx.strokeStyle = `rgba(220, 235, 255, ${0.6 * (1 - surfacing)})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(item.pos.x, item.pos.y, 4 + 10 * surfacing, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Glint: a soft pulsing ring that marks it as something to pick up.
+    const glint = 0.12 + 0.08 * Math.sin(state.time * 3 + item.phase);
+    ctx.strokeStyle = `rgba(255, 230, 160, ${glint * pop})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(item.pos.x, item.pos.y, 13, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(item.pos.x, item.pos.y + bob * 0.8);
+    ctx.rotate(item.phase + Math.sin(state.time * 1.3 + item.phase) * 0.18);
+    const scale = LOOT_SCALE * pop * (1 + bob * 0.04);
+    ctx.scale(scale, scale);
+    drawCargoIcon(ctx, CARGO[item.cargo]);
+    ctx.restore();
+  }
+}
+
+/** Collected cargo flies into the ship and a "+ Silk" label rises from it. */
+function drawLootPickups(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const FLY = 0.3; // seconds for the item to reach the ship
+  ctx.font = "bold 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  state.lootPickups.forEach((p, i) => {
+    const ship = state.ships.find((s) => s.id === p.shipId);
+    const to = ship ? ship.pos : p.from;
+    const def = CARGO[p.cargo];
+
+    if (p.age < FLY) {
+      const t = p.age / FLY;
+      const e = t * t; // accelerate into the hold
+      ctx.save();
+      ctx.globalAlpha = 1 - t * 0.5;
+      ctx.translate(p.from.x + (to.x - p.from.x) * e, p.from.y + (to.y - p.from.y) * e);
+      ctx.scale(LOOT_SCALE * (1 - 0.6 * t), LOOT_SCALE * (1 - 0.6 * t));
+      drawCargoIcon(ctx, def);
+      ctx.restore();
+    }
+
+    // Label rises above the ship; simultaneous pickups stack instead of overlapping.
+    const t = p.age / PICKUP_FX_DURATION;
+    const alpha = t < 0.15 ? t / 0.15 : 1 - Math.max(0, (t - 0.55) / 0.45);
+    const y = to.y - 48 - t * 22 - (i % 4) * 14; // starts above the health bar
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "rgba(10, 20, 30, 0.6)";
+    ctx.fillText(cargoText(p.cargo, p.qty), to.x + 1, y + 1);
+    ctx.fillStyle = def.shape === "chest" ? "#f5d77a" : "#f4f0e6";
+    ctx.fillText(cargoText(p.cargo, p.qty), to.x, y);
+    ctx.globalAlpha = 1;
+  });
+  ctx.textAlign = "left";
+}
+
+/** Small panel, bottom-left: what's in the player's hold. Rows light up briefly on pickup. */
+function drawCargoHold(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const player = getPlayer(state);
+  if (!player) return;
+  const rows = CARGO_IDS.filter((id) => (player.cargo[id] ?? 0) > 0);
+  const ROW = 18;
+  const w = 150;
+  const h = 26 + Math.max(1, rows.length) * ROW;
+  const x = 12;
+  const y = state.viewport.height - h - 12;
+
+  ctx.fillStyle = "rgba(6, 15, 24, 0.6)";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200, 225, 255, 0.15)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.fillStyle = COLORS.hudDim;
+  ctx.fillText("CARGO HOLD", x + 10, y + 17);
+
+  if (rows.length === 0) {
+    ctx.fillStyle = COLORS.hudDim;
+    ctx.fillText("Empty", x + 10, y + 17 + ROW);
+    return;
+  }
+  ctx.font = "13px system-ui, sans-serif";
+  rows.forEach((id, i) => {
+    const ry = y + 17 + (i + 1) * ROW;
+    const recent = state.lootPickups.some((p) => p.cargo === id && p.age < 0.9);
+    if (recent) {
+      ctx.fillStyle = "rgba(255, 220, 140, 0.15)";
+      ctx.fillRect(x + 4, ry - 13, w - 8, ROW - 1);
+    }
+    ctx.save();
+    ctx.translate(x + 18, ry - 4);
+    ctx.scale(1.15, 1.15);
+    drawCargoIcon(ctx, CARGO[id]);
+    ctx.restore();
+    ctx.fillStyle = recent ? "#f5d77a" : COLORS.hud;
+    ctx.fillText(CARGO[id].label, x + 32, ry);
+    ctx.textAlign = "right";
+    ctx.fillText(String(player.cargo[id]), x + w - 10, ry);
+    ctx.textAlign = "left";
+  });
 }
 
 const INDICATOR_INSET = 22; // px from the screen edge

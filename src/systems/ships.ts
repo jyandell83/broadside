@@ -41,6 +41,7 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     sinkSpin: 0,
     smokeTimer: 0,
     pendingShots: [],
+    cargo: {},
   };
 }
 
@@ -78,7 +79,8 @@ export function startSinking(ship: Ship): void {
 const SINK_DRAG = 0.8; // how quickly a wreck loses way
 const WRECK_DRIFT = 0.04; // fraction of wind speed a wreck is pushed downwind
 
-export function updateShips(state: GameState, dt: number): void {
+/** Moves ships. Returns the wrecks that finished sinking and were removed this tick. */
+export function updateShips(state: GameState, dt: number): Ship[] {
   for (const ship of state.ships) {
     if (ship.sinkAge !== null) {
       // Disabled: coast to a stop, slowly turn, and drift a little with the wind.
@@ -110,7 +112,10 @@ export function updateShips(state: GameState, dt: number): void {
     ship.reload.port = Math.max(0, ship.reload.port - dt);
     ship.reload.starboard = Math.max(0, ship.reload.starboard - dt);
   }
-  state.ships = state.ships.filter((s) => s.sinkAge === null || s.sinkAge < SINK_DURATION);
+  const afloat = (s: Ship) => s.sinkAge === null || s.sinkAge < SINK_DURATION;
+  const sunk = state.ships.filter((s) => !afloat(s));
+  state.ships = state.ships.filter(afloat);
+  return sunk;
 }
 
 /** Placeholder enemy behaviour: sail in circles and fire when the player is abeam. */
