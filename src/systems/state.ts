@@ -1,5 +1,5 @@
 import type { GameState } from "../types";
-import { createShip } from "./ships";
+import { autoBrace, createShip } from "./ships";
 import { createWind } from "./wind";
 
 export function createGameState(width: number, height: number): GameState {
@@ -15,6 +15,7 @@ export function createGameState(width: number, height: number): GameState {
   };
   state.ships.push(createShip(state, "player", { x: width * 0.3, y: height * 0.5 }, 0));
   state.ships.push(createShip(state, "enemy", { x: width * 0.7, y: height * 0.5 }, Math.PI));
+  for (const ship of state.ships) autoBrace(state, ship); // start with the yards braced sensibly
   return state;
 }
 

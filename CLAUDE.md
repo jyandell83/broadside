@@ -54,8 +54,11 @@ There is no test runner yet.
 - Coordinates use screen space (y down); `heading` 0 points toward +x, and starboard is `heading + PI/2`.
 - Movement is wind-driven (age of sail), with no throttle. `systems/wind.ts` holds the sailing model:
   - `state.wind.dir` is the direction the wind blows *toward*.
-  - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × trimEfficiency(trim)`.
-  - Ships within 45° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
+  - Ships are square-rigged. `ship.brace` is the angle of the sails' face from the bow (+ = toward starboard, 0 = yards square across), limited to ±`BRACE_LIMIT`.
+  - The ideal brace is half the angle between the bow and the direction the wind blows toward (`idealBrace`).
+  - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × braceEfficiency`.
+  - Ships within 60° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
+  - `sailFill` is used only for visuals: how squarely the wind hits the back of the sail. Negative means "taken aback".
   - Rudder authority scales with speed.
   - The wind shifts every 20–45s toward a new random direction and strength, and eases toward it over about 15s (`updateWind`).
   - Ships and wind share one speed scale (`PX_PER_KNOT` in `wind.ts`). Use it for any speed shown to the player.

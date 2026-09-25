@@ -21,9 +21,9 @@ export interface Ship {
   heading: number; // radians, 0 = facing +x
   speed: number;
   sails: number; // 0 (furled) .. 1 (full sail)
-  trim: number; // radians the sails are let out from the centreline, 0..PI/2
+  brace: number; // radians the sails' face is swung from the bow (+ = toward starboard); 0 = yards square across
   offWind: number; // derived each tick: 0 = bow into the wind, PI = dead downwind
-  sailEfficiency: number; // derived each tick: 0..1, how well the trim suits the wind
+  sailEfficiency: number; // derived each tick: 0..1, how well the brace suits the wind
   radius: number;
   hp: number;
   maxHp: number;

@@ -1,22 +1,26 @@
 import type { GameState, Ship } from "../types";
 import { getPlayer } from "./state";
 import { SPLASH_DURATION } from "./weapons";
-import { PX_PER_KNOT, pointOfSailName, trimAdvice, windFromRelative, windKnots } from "./wind";
+import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
 const COLORS = {
   water: "#0b1d2e",
   streak: "rgba(200, 225, 255, 0.12)",
-  player: "#e8d8a8",
-  enemy: "#c0504d",
+  // Hulls are darker than the sails so the sails always read against them.
+  player: "#9c7447",
+  enemy: "#8e3530",
   sail: "#f4f0e6",
   sailLuffing: "#9aa3ad",
+  sailAback: "#d9a58f",
+  yard: "#3b2715",
+  sailEdge: "rgba(30, 20, 10, 0.45)",
   shot: "#f2f2f2",
   hud: "#e8e8e8",
   hudDim: "#8a9aaa",
   hpBack: "#333",
   hpFront: "#6fcf6f",
-  trimGood: "#6fcf6f",
-  trimBad: "#e0a040",
+  braceGood: "#6fcf6f",
+  braceBad: "#e0a040",
 };
 
 const STREAK_COUNT = 40;
@@ -101,21 +105,7 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.closePath();
   ctx.fill();
 
-  // Sail swings to the side away from the wind; flaps when it isn't drawing.
-  if (ship.sails > 0.05) {
-    const windFromStarboard = windFromRelative(ship.heading, state.wind) > 0;
-    const luffing = ship.sailEfficiency < 0.3;
-    const flap = luffing ? Math.sin(state.time * 40 + ship.id) * 0.12 : 0;
-    const boom = Math.PI + (windFromStarboard ? ship.trim : -ship.trim) + flap;
-    const len = 8 + 16 * ship.sails;
-    ctx.strokeStyle = luffing ? COLORS.sailLuffing : COLORS.sail;
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(4, 0);
-    ctx.lineTo(4 + Math.cos(boom) * len, Math.sin(boom) * len);
-    ctx.stroke();
-  }
+  drawSails(ctx, ship, state);
   ctx.restore();
 
   // Health bar (unrotated).
@@ -128,11 +118,66 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.fillRect(x, y, w * Math.max(0, ship.hp / ship.maxHp), 4);
 }
 
+// Mast positions along the hull (ship-local x) and half-length of each yard.
+const MASTS: [number, number][] = [
+  [11, 11], // fore
+  [1, 13], // main
+  [-9, 10], // mizzen
+];
+
+/**
+ * Square sails seen from above: each yard is a line across the ship, and the sail bellies
+ * out along its face when the wind fills it. Drawn in ship-local coordinates.
+ */
+function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): void {
+  const nx = Math.cos(ship.brace); // the sail's face direction
+  const ny = Math.sin(ship.brace);
+  const yx = -ny; // along the yard
+  const yy = nx;
+
+  const fill = sailFill(ship, state.wind);
+  const aback = fill < 0;
+  const luffing = !aback && ship.sailEfficiency < 0.3;
+  const flap = luffing ? Math.sin(state.time * 30 + ship.id) * 0.5 : 0;
+  // Belly depth: deep when drawing well, flat when edge-on or mis-braced, reversed when aback.
+  // Sail amount changes the depth only partly, so the bulge stays readable at reduced sail.
+  const belly = (0.5 + 0.5 * ship.sails) * 8 * (aback ? fill * 0.6 : fill * (0.25 + 0.75 * ship.sailEfficiency) + flap);
+
+  for (const [mx, half] of MASTS) {
+    const x1 = mx + yx * half;
+    const y1 = yy * half;
+    const x2 = mx - yx * half;
+    const y2 = -yy * half;
+
+    if (ship.sails > 0.05) {
+      ctx.fillStyle = aback ? COLORS.sailAback : luffing ? COLORS.sailLuffing : COLORS.sail;
+      ctx.globalAlpha = 0.5 + 0.5 * ship.sails;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(mx + nx * belly * 2, ny * belly * 2, x2, y2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = COLORS.sailEdge;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = COLORS.yard;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+}
+
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const player = getPlayer(state);
   ctx.font = "14px system-ui, sans-serif";
   ctx.fillStyle = COLORS.hudDim;
-  ctx.fillText("A/D rudder · W/S raise/furl sails · ←/→ haul in/ease out · Q/E fire port/starboard", 12, 22);
+  ctx.fillText("A/D rudder · W/S raise/furl sails · ←/→ brace yards · Q/E fire port/starboard", 12, 22);
   ctx.fillStyle = COLORS.hud;
   if (!player) {
     ctx.fillText("Sunk! Press R to restart.", 12, 46);
@@ -140,23 +185,25 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   }
 
   const deg = (r: number) => Math.round((r * 180) / Math.PI);
+  const braceText =
+    Math.abs(player.brace) < 0.02 ? "square" : `${Math.abs(deg(player.brace))}° to ${player.brace > 0 ? "starboard" : "port"}`;
   const reload = (s: number) => (s > 0 ? s.toFixed(1) + "s" : "ready");
   const lines = [
     `${pointOfSailName(player.offWind)} · ${deg(player.offWind)}° off the wind`,
-    `Sails ${Math.round(player.sails * 100)}% · Trim ${deg(player.trim)}° · Speed ${Math.round(player.speed / PX_PER_KNOT)} kn`,
+    `Sails ${Math.round(player.sails * 100)}% · Yards ${braceText} · Speed ${Math.round(player.speed / PX_PER_KNOT)} kn`,
     `Port: ${reload(player.reload.port)}   Starboard: ${reload(player.reload.starboard)}`,
   ];
   lines.forEach((line, i) => ctx.fillText(line, 12, 46 + i * 20));
 
-  // Trim quality bar.
+  // Brace quality bar.
   const y = 46 + lines.length * 20 - 6;
   const good = player.sailEfficiency > 0.75;
   ctx.fillStyle = COLORS.hpBack;
   ctx.fillRect(12, y, 120, 8);
-  ctx.fillStyle = good ? COLORS.trimGood : COLORS.trimBad;
+  ctx.fillStyle = good ? COLORS.braceGood : COLORS.braceBad;
   ctx.fillRect(12, y, 120 * player.sailEfficiency, 8);
   ctx.fillStyle = COLORS.hud;
-  ctx.fillText(trimAdvice(player), 142, y + 8);
+  ctx.fillText(braceAdvice(player, state.wind), 142, y + 8);
 }
 
 function drawWindIndicator(ctx: CanvasRenderingContext2D, state: GameState): void {

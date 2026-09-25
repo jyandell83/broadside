@@ -40,9 +40,9 @@ function update(dt: number): void {
   if (player) {
     const turn = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0);
     const setSail = (input.isDown("KeyW") ? 1 : 0) - (input.isDown("KeyS") ? 1 : 0);
-    const trim = (input.isDown("ArrowRight") ? 1 : 0) - (input.isDown("ArrowLeft") ? 1 : 0);
+    const brace = (input.isDown("ArrowRight") ? 1 : 0) - (input.isDown("ArrowLeft") ? 1 : 0);
     steerShip(player, turn, dt);
-    adjustSails(player, setSail, trim, dt);
+    adjustSails(player, setSail, brace, dt);
     if (input.isDown("KeyQ")) fireBroadside(state, player, "port");
     if (input.isDown("KeyE")) fireBroadside(state, player, "starboard");
   }

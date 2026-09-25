@@ -2,20 +2,26 @@ import type { Ship, Wind } from "../types";
 
 const DEG = Math.PI / 180;
 
-/** Ships can't make headway closer to the wind than this. */
-export const NO_GO = 45 * DEG;
+/**
+ * Square rig: ships can't make headway closer to the wind than this.
+ * Real square-riggers managed ~65°; a little closer keeps it arcade-friendly.
+ */
+export const NO_GO = 60 * DEG;
 
-/** How far the trim can be off ideal before the sails stop drawing at all. */
-const TRIM_TOLERANCE = 30 * DEG;
+/** How far the yards can be braced round from square across the ship. */
+export const BRACE_LIMIT = 65 * DEG;
 
-/** Speed multiplier by angle off the wind (degrees). Beam and broad reaches are fastest. */
+/** How far the brace can be off ideal before the sails stop drawing at all. */
+const BRACE_TOLERANCE = 30 * DEG;
+
+/** Speed multiplier by angle off the wind (degrees). Square-riggers are happiest off the wind. */
 const POLAR: [number, number][] = [
-  [45, 0.5],
-  [60, 0.75],
-  [90, 1],
+  [60, 0.5],
+  [75, 0.75],
+  [90, 0.9],
   [120, 1],
-  [150, 0.9],
-  [180, 0.75],
+  [150, 1],
+  [180, 0.9],
 ];
 
 /** One speed scale for ships and wind, so the readouts and on-screen motion agree. */
@@ -65,25 +71,29 @@ export function angleDiff(a: number, b: number): number {
   return Math.atan2(Math.sin(d), Math.cos(d));
 }
 
-/** Where the wind comes from relative to the bow: positive = starboard side. */
-export function windFromRelative(heading: number, wind: Wind): number {
-  return angleDiff(wind.dir + Math.PI, heading);
-}
-
 /** Angle between the bow and the wind's source: 0 = head to wind, PI = dead downwind. */
 export function offWindAngle(heading: number, wind: Wind): number {
-  return Math.abs(windFromRelative(heading, wind));
+  return Math.abs(angleDiff(wind.dir + Math.PI, heading));
 }
 
-/** Best sail trim for a point of sail: sheeted in close-hauled, fully out when running. */
-export function idealTrim(offWind: number): number {
-  if (offWind < NO_GO) return 0;
-  return 10 * DEG + (offWind - NO_GO) * (80 / 135);
+/** Direction the wind blows toward, relative to the bow: positive = toward starboard. */
+export function windToRelative(heading: number, wind: Wind): number {
+  return angleDiff(wind.dir, heading);
+}
+
+/**
+ * Best brace: the sail should face halfway between the bow and where the wind is going.
+ * Brace is the angle of the sail's face from the bow (positive = toward starboard);
+ * 0 means the yards are square across the ship.
+ */
+export function idealBrace(heading: number, wind: Wind): number {
+  const half = windToRelative(heading, wind) / 2;
+  return Math.max(-BRACE_LIMIT, Math.min(BRACE_LIMIT, half));
 }
 
 export function polarFactor(offWind: number): number {
   const deg = offWind / DEG;
-  if (deg < 45) return 0;
+  if (offWind < NO_GO) return 0;
   for (let i = 1; i < POLAR.length; i++) {
     const [d1, v1] = POLAR[i]!;
     if (deg <= d1) {
@@ -94,26 +104,35 @@ export function polarFactor(offWind: number): number {
   return POLAR[POLAR.length - 1]![1];
 }
 
-/** 1 when trimmed perfectly, falling to 0 when luffing (too loose) or stalled (too tight). */
-export function trimEfficiency(trim: number, offWind: number): number {
-  const err = (trim - idealTrim(offWind)) / TRIM_TOLERANCE;
+/** 1 when braced perfectly, falling to 0 as the brace gets further off. */
+export function braceEfficiency(ship: Ship, wind: Wind): number {
+  const err = angleDiff(ship.brace, idealBrace(ship.heading, wind)) / BRACE_TOLERANCE;
   return Math.max(0, 1 - err * err);
+}
+
+/**
+ * How much the wind is filling the sail from behind: 1 = square on, 0 = edge on,
+ * negative = the wind is on the front of the sail ("taken aback").
+ */
+export function sailFill(ship: Ship, wind: Wind): number {
+  return Math.cos(angleDiff(windToRelative(ship.heading, wind), ship.brace));
 }
 
 export function pointOfSailName(offWind: number): string {
   const deg = offWind / DEG;
-  if (deg < 45) return "In irons";
-  if (deg < 70) return "Close-hauled";
+  if (offWind < NO_GO) return "In irons";
+  if (deg < 75) return "Close-hauled";
   if (deg < 110) return "Beam reach";
   if (deg < 160) return "Broad reach";
   return "Running";
 }
 
-/** Describes whether the player should haul in or ease the sails. */
-export function trimAdvice(ship: Ship): string {
+/** Tells the player which way to swing the yards. */
+export function braceAdvice(ship: Ship, wind: Wind): string {
   if (ship.offWind < NO_GO) return "";
-  const err = ship.trim - idealTrim(ship.offWind);
-  if (err > TRIM_TOLERANCE / 3) return "Luffing: haul in";
-  if (err < -TRIM_TOLERANCE / 3) return "Overtrimmed: ease out";
+  if (sailFill(ship, wind) < 0) return "Taken aback!";
+  const err = angleDiff(ship.brace, idealBrace(ship.heading, wind));
+  if (err > BRACE_TOLERANCE / 3) return "Brace to port (←)";
+  if (err < -BRACE_TOLERANCE / 3) return "Brace to starboard (→)";
   return "Drawing well";
 }
