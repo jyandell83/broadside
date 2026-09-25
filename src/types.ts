@@ -9,6 +9,7 @@ export type Side = "port" | "starboard";
 
 export interface Wind {
   dir: number; // radians, the direction the wind blows TOWARD
+  prevailing: number; // radians: shifts wander around this, never further than MAX_SHIFT from it
   strength: number; // 0..1
   targetDir: number; // the wind eases toward these between shifts
   targetStrength: number;

@@ -7,7 +7,9 @@ import { coastPoint } from "./islands";
  * belongs on these entries.
  */
 const PORT_DEFS: { id: string; name: string; islandId: string; angle: number }[] = [
-  { id: "port-ashby", name: "Port Ashby", islandId: "ashby", angle: Math.PI * 0.25 }, // faces the open sea to the south-east
+  // Harbour faces east, toward open water, across the prevailing northerly wind: approached
+  // and left on a reach rather than a beat.
+  { id: "port-ashby", name: "Port Ashby", islandId: "ashby", angle: 0 },
 ];
 
 const PIER_LENGTH = 55; // px out from the shore

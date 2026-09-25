@@ -631,8 +631,8 @@ function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): 
     ctx.stroke();
   }
 
-  // Name above the settlement.
-  const label = coastPoint(island, a, -78);
+  // Name just inland of the settlement (the buildings reach ~60px in from the shore).
+  const label = coastPoint(island, a, -100);
   ctx.font = "600 15px Georgia, serif";
   ctx.textAlign = "center";
   ctx.fillStyle = "rgba(10, 20, 15, 0.6)";

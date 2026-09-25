@@ -61,7 +61,7 @@ There is no test runner yet.
   - `render` draws the world inside a camera translate, then draws the HUD and the off-screen enemy arrows in screen space. Use `worldToScreen` to convert between the two.
   - The wake (`systems/wake.ts`, `state.wake`) and the bow wave are purely visual and scale with speed; they never feed back into gameplay.
   - Broadsides ripple-fire. `fireBroadside` starts the reload and queues `ship.pendingShots`; `updateGuns` fires each gun from the ship's current position at its gun port, with a `muzzleBlast` (flash, gun smoke, slight recoil). A sinking ship drops its queued shots.
-  - Islands (`systems/islands.ts`, fixed data in `ISLANDS`):
+  - Islands (`systems/islands.ts`, fixed data in `ISLANDS`; each game state gets its own copy):
     - The coast is `radius × (1 + Σ amp·sin(k·θ + phase))` around a centre, so islands are star-shaped: no deep hooked harbours or overhangs. Those would need polygon collision.
     - Rendering (`islandPath`), land collision (`pushOutOfLand`, `isOnLand`) and port placement all use `coastRadius`, so they always agree.
     - Ships are pushed out radially. `updateShips` then drains speed and swings the bow along the shore in proportion to how squarely it hit, so ships slide off the coast rather than sticking.
@@ -87,6 +87,8 @@ There is no test runner yet.
   - Arcade tuning: a ship never drops below `MIN_SPEED` (even in irons).
   - Steering is `max(rudder, pivot)`. Rudder authority grows with speed; the pivot boost gives full turn rate when nearly stopped, so a bad heading is always recoverable.
   - The wind shifts every 20–45s toward a new random direction and strength, and eases toward it over about 15s (`updateWind`).
+  - There is a prevailing wind (`wind.prevailing`, from the north). Shifts stay within `MAX_SHIFT` (40°) of it and change by at most 40° at a time.
+  - Map layout assumes the prevailing wind. For example, Port Ashby sits due west of the spawn point with its harbour facing east, so it's reached and left on a beam reach rather than a beat. Check new ports and islands against the prevailing wind.
   - Ships and wind share one speed scale (`PX_PER_KNOT` in `wind.ts`). Use it for any speed shown to the player.
   - `wind.drift` is added up each tick and moves the on-water streaks. Don't derive streak positions from `time × wind`, because every shift then makes them jump.
   - `offWind` and `sailEfficiency` on `Ship` are derived each tick in `updateShips`. Don't set them anywhere else.

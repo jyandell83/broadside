@@ -32,7 +32,7 @@ export const WIND_MAX_KNOTS = 20;
 // Wind shifts: every so often pick a new target, then ease toward it.
 const SHIFT_INTERVAL_MIN = 20; // seconds
 const SHIFT_INTERVAL_MAX = 45;
-const MAX_SHIFT = 40 * DEG; // largest single change of direction
+const MAX_SHIFT = 40 * DEG; // largest single change of direction, and the furthest from the prevailing wind
 const STRENGTH_MIN = 0.5;
 const STRENGTH_MAX = 1;
 const SHIFT_EASE = 0.15; // per second; ~15s for a shift to mostly settle
@@ -41,14 +41,26 @@ function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-export function createWind(dir: number): Wind {
-  return { dir, strength: 0.8, targetDir: dir, targetStrength: 0.8, nextShift: rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX), drift: { x: 0, y: 0 } };
+/** `prevailing` is where the wind blows toward on average; the map's layout assumes it. */
+export function createWind(prevailing: number): Wind {
+  return {
+    dir: prevailing,
+    prevailing,
+    strength: 0.8,
+    targetDir: prevailing,
+    targetStrength: 0.8,
+    nextShift: rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX),
+    drift: { x: 0, y: 0 },
+  };
 }
 
 export function updateWind(wind: Wind, dt: number): void {
   wind.nextShift -= dt;
   if (wind.nextShift <= 0) {
-    wind.targetDir = wind.dir + rand(-MAX_SHIFT, MAX_SHIFT);
+    // New direction within MAX_SHIFT of the prevailing wind, and no more than MAX_SHIFT from now.
+    const candidate = wind.prevailing + rand(-MAX_SHIFT, MAX_SHIFT);
+    const change = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT, angleDiff(candidate, wind.dir)));
+    wind.targetDir = wind.dir + change;
     wind.targetStrength = rand(STRENGTH_MIN, STRENGTH_MAX);
     wind.nextShift = rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX);
   }

@@ -18,8 +18,9 @@ export function createGameState(viewportWidth: number, viewportHeight: number): 
     viewport: { width: viewportWidth, height: viewportHeight },
     camera: { x: 0, y: 0 },
     cameraLead: { x: 0, y: 0 },
-    islands: ISLANDS,
-    ports: createPorts(ISLANDS),
+    // Each game gets its own copy, so nothing done to islands at runtime leaks into the definitions.
+    islands: ISLANDS.map((i) => ({ ...i, center: { ...i.center } })),
+    ports: [],
     ships: [],
     projectiles: [],
     splashes: [],
@@ -28,10 +29,13 @@ export function createGameState(viewportWidth: number, viewportHeight: number): 
     loot: [],
     lootPickups: [],
     shake: 0,
-    wind: createWind(Math.PI / 2), // blowing from the north (top of the world)
+    // Prevailing wind from the north (blowing toward the bottom of the world). Port placement
+    // assumes this: see islands.ts.
+    wind: createWind(Math.PI / 2),
     nextId: 1,
     time: 0,
   };
+  state.ports = createPorts(state.islands);
   const cx = WORLD_WIDTH / 2;
   const cy = WORLD_HEIGHT / 2;
   const half = SPAWN_SEPARATION / 2;

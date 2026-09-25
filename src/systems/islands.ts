@@ -11,7 +11,10 @@ export const ISLANDS: Island[] = [
   {
     id: "ashby",
     name: "Ashby Isle",
-    center: { x: 1250, y: 1050 },
+    // Due west of the spawn point, so with the prevailing northerly the run to and from
+    // Port Ashby (harbour facing east) is a beam reach both ways. ~750px of sea room to
+    // the west and ~1,600px north and south, so there's space to tack around it.
+    center: { x: 1050, y: 1875 },
     radius: 230,
     harmonics: [
       [2, 0.1, 0.6],
