@@ -1,5 +1,6 @@
 import type { GameState, Island, Port, Ship } from "../types";
 import { coastPoint } from "./islands";
+import { PX_PER_KNOT } from "./wind";
 
 /**
  * Port definitions. A port is an island + the direction its harbour faces; the pier, berth and
@@ -18,6 +19,10 @@ const BERTH_SIDE = 26; // px from the pier's centreline to a docked ship's centr
 const DOCK_ZONE_OFFSET = 95; // px from the shore to the docking area's centre
 const DOCK_ZONE_RADIUS = 95;
 const BERTH_EASE = 2.5; // per second: how quickly a docking ship settles into its berth
+// Docking takes a little seamanship: sails furled and the ship all but stopped. Forgiving on
+// purpose: ships never drop below ~1 kn (MIN_SPEED), so "stopped" means slower than this.
+const DOCK_MAX_SAILS = 0.05; // sails at or below this count as furled
+const DOCK_MAX_SPEED = 3 * PX_PER_KNOT; // px/s (3 kn)
 
 export function createPorts(islands: Island[]): Port[] {
   return PORT_DEFS.map((def) => {
@@ -42,6 +47,18 @@ export function createPorts(islands: Island[]): Port[] {
 export function dockablePort(state: GameState, ship: Ship): Port | undefined {
   if (ship.docked || ship.sinkAge !== null) return undefined;
   return state.ports.find((p) => Math.hypot(ship.pos.x - p.dockZone.center.x, ship.pos.y - p.dockZone.center.y) <= p.dockZone.radius);
+}
+
+/**
+ * Docking state for a ship in a port's docking area:
+ * "sails" = sails still set, "slowing" = furled but still making way, "ready" = can dock now.
+ */
+export function dockStatus(state: GameState, ship: Ship): { port: Port; status: "sails" | "slowing" | "ready" } | undefined {
+  const port = dockablePort(state, ship);
+  if (!port) return undefined;
+  if (ship.sails > DOCK_MAX_SAILS) return { port, status: "sails" };
+  if (ship.speed > DOCK_MAX_SPEED) return { port, status: "slowing" };
+  return { port, status: "ready" };
 }
 
 export function dock(ship: Ship, port: Port): void {

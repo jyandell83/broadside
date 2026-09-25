@@ -7,7 +7,7 @@ import { SHIP_SCALE } from "./hull";
 import { CARGO, CARGO_IDS, cargoText, type CargoDef } from "./cargo";
 import { PICKUP_FX_DURATION, SURFACE_TIME } from "./loot";
 import { coastPoint, coastRadius, maxRadius } from "./islands";
-import { dockablePort, getPort } from "./ports";
+import { dockStatus, dockablePort, getPort } from "./ports";
 import { MAX_SPEED } from "./ships";
 import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
@@ -650,8 +650,11 @@ function drawPortPrompt(ctx: CanvasRenderingContext2D, state: GameState): void {
   if (player.docked) {
     text = `Docked at ${getPort(state, player.docked.portId)?.name ?? "port"}`;
   } else {
-    const port = dockablePort(state, player);
-    if (port) text = `Press F to dock at ${port.name}`;
+    // Approach → furl sails → ship slows → Dock becomes available.
+    const approach = dockStatus(state, player);
+    if (approach?.status === "sails") text = "Furl sails to dock";
+    else if (approach?.status === "slowing") text = "Slowing to dock…";
+    else if (approach?.status === "ready") text = `Press F to dock at ${approach.port.name}`;
   }
   if (!text) return;
   ctx.font = "600 14px system-ui, sans-serif";

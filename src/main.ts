@@ -11,7 +11,7 @@ import { updateCamera } from "./systems/camera";
 import { updateWake } from "./systems/wake";
 import { updateEffects } from "./systems/effects";
 import { dropWreckCargo, updateLoot } from "./systems/loot";
-import { dock, dockablePort, setSail } from "./systems/ports";
+import { dock, dockStatus, setSail } from "./systems/ports";
 import { createPortPanel } from "./ui/portPanel";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
@@ -47,11 +47,11 @@ function update(dt: number): void {
   updateWind(state.wind, dt);
 
   const player = getPlayer(state);
-  // F docks inside a port's docking area, and sets sail again when docked.
+  // F docks once the ship is stopped in a port's docking area, and sets sail again when docked.
   if (player && input.wasPressed("KeyF")) {
-    const port = dockablePort(state, player);
+    const approach = dockStatus(state, player);
     if (player.docked) setSail(player);
-    else if (port) dock(player, port);
+    else if (approach?.status === "ready") dock(player, approach.port);
   }
   if (player && !player.docked) {
     const turn = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0);

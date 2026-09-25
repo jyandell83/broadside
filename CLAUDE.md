@@ -67,7 +67,8 @@ There is no test runner yet.
     - Ships are pushed out radially. `updateShips` then drains speed and swings the bow along the shore in proportion to how squarely it hit, so ships slide off the coast rather than sticking.
     - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
   - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that. Future per-port data (prices, services) goes on the def.
-    - F docks inside a port's docking area and sets sail when docked.
+    - Docking needs furled sails and a near-stop, using the existing sail and speed values (no separate docking state). `dockablePort` means "inside the docking area"; `dockStatus` adds readiness: `"sails"` (sails still set), `"slowing"` (furled, faster than `DOCK_MAX_SPEED`, 3 kn), or `"ready"`. The prompt and the F key read `dockStatus`.
+    - F docks when ready and sets sail when docked.
     - `ship.docked` disables steering, sails and firing, and eases the ship into its berth.
     - Enemy AI won't fire at a docked player.
   - The Port screen is a DOM panel (`src/ui/portPanel.ts`, styled in `style.css`), not canvas. `portPanel.sync(state)` runs each tick and shows it while the player is docked, reading `ship.cargo` directly. Put future menu-style UI (trading and so on) in the DOM too.
