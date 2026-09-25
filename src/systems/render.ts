@@ -3,6 +3,7 @@ import { getPlayer } from "./state";
 import { SPLASH_DURATION } from "./weapons";
 import { worldToScreen } from "./camera";
 import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
+import { SHIP_SCALE } from "./hull";
 import { MAX_SPEED } from "./ships";
 import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
@@ -195,6 +196,7 @@ function wrap(v: number, max: number): number {
   return ((v % max) + max) % max;
 }
 
+/** Hull outline in base units; keep in step with HULL in hull.ts. */
 function hullPath(ctx: CanvasRenderingContext2D): void {
   ctx.beginPath();
   ctx.moveTo(22, 0);
@@ -215,6 +217,8 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.globalAlpha = fade;
   ctx.translate(ship.pos.x + ship.jolt.x, ship.pos.y + ship.jolt.y);
   ctx.rotate(ship.heading + ship.joltSpin);
+  // Everything below is drawn in ship-local base units (see hull.ts).
+  ctx.scale(SHIP_SCALE, SHIP_SCALE);
   drawBowWave(ctx, ship);
 
   // Listing, seen from above: the deck foreshortens across the beam as she heels,
@@ -248,7 +252,7 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
 
   if (ship.sinkAge !== null) return;
   // Health bar (unrotated).
-  const w = 36;
+  const w = 36 * SHIP_SCALE;
   const x = ship.pos.x - w / 2;
   const y = ship.pos.y - ship.radius - 12;
   ctx.fillStyle = COLORS.hpBack;
@@ -314,6 +318,13 @@ function drawParticles(ctx: CanvasRenderingContext2D, state: GameState, layer: "
         ctx.fillStyle = `rgba(150, 150, 155, ${0.3 * (1 - t)})`;
         ctx.beginPath();
         ctx.arc(p.pos.x, p.pos.y, p.size * (1 + 2 * t), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case "gunsmoke":
+        // Quick white puff from a gun port: expands a little and is gone in well under a second.
+        ctx.fillStyle = `rgba(225, 225, 218, ${0.5 * (1 - t) * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, p.size * (1 + 1.6 * t), 0, Math.PI * 2);
         ctx.fill();
         break;
       case "ember":

@@ -1,5 +1,6 @@
 import type { GameState, ParticleKind, Ship, Vec2 } from "../types";
 import { PX_PER_KNOT, WIND_MAX_KNOTS } from "./wind";
+import { HULL, shipToWorld, worldToShip } from "./hull";
 
 // Everything here is visual. Nothing in this file changes positions, HP or anything else
 // gameplay reads; ship jolt and camera shake are offsets applied only when drawing.
@@ -46,22 +47,31 @@ function smokePuff(state: GameState, pos: Vec2, size: number, life: number): voi
   spawn(state, "smoke", pos, { x: d.x + rand(-8, 8), y: d.y + rand(-8, 8) }, life, size, 0.3);
 }
 
-/** Moves a world point in a ship's local frame (x toward the bow, y toward starboard). */
-function shipLocalToWorld(ship: Ship, lx: number, ly: number): Vec2 {
-  const c = Math.cos(ship.heading);
-  const s = Math.sin(ship.heading);
-  return { x: ship.pos.x + c * lx - s * ly, y: ship.pos.y + s * lx + c * ly };
-}
-
 /** Snaps a hit point from the round collision circle onto the hull's outline. */
 function hullPoint(ship: Ship, p: Vec2): Vec2 {
-  const c = Math.cos(ship.heading);
-  const s = Math.sin(ship.heading);
-  const dx = p.x - ship.pos.x;
-  const dy = p.y - ship.pos.y;
-  const lx = Math.max(-18, Math.min(20, dx * c + dy * s));
-  const ly = Math.max(-7, Math.min(7, -dx * s + dy * c));
-  return shipLocalToWorld(ship, lx, ly);
+  const local = worldToShip(ship, p);
+  const lx = Math.max(HULL.stern, Math.min(HULL.bow - 2, local.x));
+  const ly = Math.max(-HULL.halfBeam, Math.min(HULL.halfBeam, local.y));
+  return shipToWorld(ship, lx, ly);
+}
+
+// Firing feedback: a small flash and a quick puff of white smoke at each gun port.
+const RECOIL_PX = 1; // visual shove per gun, away from the firing side
+const RECOIL_SPIN = 0.01;
+
+/** One gun firing from `at`, shooting along `dir` (unit vector). Visual only. */
+export function muzzleBlast(state: GameState, ship: Ship, at: Vec2, dir: Vec2): void {
+  const out = { x: at.x + dir.x * 3, y: at.y + dir.y * 3 };
+  spawn(state, "flash", out, { x: dir.x * 20, y: dir.y * 20 }, 0.07, 6, 6);
+  const d = smokeDrift(state);
+  for (let i = 0; i < 2; i++) {
+    const v = rand(30, 55);
+    const a = Math.atan2(dir.y, dir.x) + rand(-0.35, 0.35);
+    spawn(state, "gunsmoke", out, { x: Math.cos(a) * v + d.x, y: Math.sin(a) * v + d.y }, rand(0.55, 0.8), rand(2.5, 3.5), 2.5);
+  }
+  ship.jolt.x -= dir.x * RECOIL_PX;
+  ship.jolt.y -= dir.y * RECOIL_PX;
+  ship.joltSpin += (Math.random() - 0.5) * RECOIL_SPIN;
 }
 
 /**
@@ -99,7 +109,7 @@ export function cannonImpact(state: GameState, ship: Ship, ballPos: Vec2, ballVe
     for (let i = 0; i < 10; i++) {
       const a = rand(0, Math.PI * 2);
       const v = rand(10, 45);
-      spawn(state, "wreckage", shipLocalToWorld(ship, rand(-14, 14), rand(-5, 5)), { x: Math.cos(a) * v, y: Math.sin(a) * v }, rand(4, 6), rand(3, 6), 1.2);
+      spawn(state, "wreckage", shipToWorld(ship, rand(-14, 14), rand(-5, 5)), { x: Math.cos(a) * v, y: Math.sin(a) * v }, rand(4, 6), rand(3, 6), 1.2);
     }
   }
 }
@@ -131,19 +141,19 @@ export function updateEffects(state: GameState, dt: number): void {
       const heavy = sinking ? 1 - sinkT : (damage - 0.3) / 0.7;
       ship.smokeTimer = sinking ? 0.3 + 0.4 * sinkT : 0.5 - 0.3 * heavy;
       for (const [lx, ly] of fireSpots(ship)) {
-        if (Math.random() < 0.5) smokePuff(state, shipLocalToWorld(ship, lx, ly), 2.5 + 2.5 * heavy, 1 + 1 * heavy);
+        if (Math.random() < 0.5) smokePuff(state, shipToWorld(ship, lx, ly), 2.5 + 2.5 * heavy, 1 + 1 * heavy);
       }
       if (damage > 0.6 || sinking) {
         const [lx, ly] = fireSpots(ship)[0]!;
         const a = rand(0, Math.PI * 2);
-        spawn(state, "ember", shipLocalToWorld(ship, lx, ly), { x: Math.cos(a) * 20, y: Math.sin(a) * 20 }, rand(0.3, 0.6), 1.5, 2);
+        spawn(state, "ember", shipToWorld(ship, lx, ly), { x: Math.cos(a) * 20, y: Math.sin(a) * 20 }, rand(0.3, 0.6), 1.5, 2);
       }
     }
 
     if (sinking) {
       // Air escaping around the hull as she goes down.
       if (Math.random() < 0.5) {
-        const p = shipLocalToWorld(ship, rand(-20, 20), rand(-9, 9) * ship.listSide);
+        const p = shipToWorld(ship, rand(-20, 20), rand(-9, 9) * ship.listSide);
         spawn(state, "bubble", p, { x: 0, y: 0 }, rand(0.5, 0.9), rand(1.5, 3));
       }
     }

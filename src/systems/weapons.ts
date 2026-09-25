@@ -1,4 +1,6 @@
 import type { GameState, Ship, Side } from "../types";
+import { muzzleBlast } from "./effects";
+import { HULL, shipToWorld } from "./hull";
 
 const RELOAD_TIME = 2.5; // seconds
 const GUNS_PER_SIDE = 3;
@@ -11,32 +13,60 @@ const SHOT_DAMAGE = 10;
 const SPREAD = 0.08; // radians of random scatter
 export const SPLASH_DURATION = 0.7; // seconds
 
-export function fireBroadside(state: GameState, ship: Ship, side: Side): void {
+const GUN_SPACING = 10; // base units between guns along the hull
+const RIPPLE_DELAY = 0.07; // seconds between guns in a broadside, fired bow to stern
+const RIPPLE_JITTER = 0.015; // ± seconds, so the rhythm isn't mechanical
+
+/** Starts a broadside: reload begins now, and the guns fire in quick succession (see updateGuns). */
+export function fireBroadside(ship: Ship, side: Side): void {
   if (ship.reload[side] > 0 || ship.sinkAge !== null) return;
   ship.reload[side] = RELOAD_TIME;
+  for (let i = 0; i < GUNS_PER_SIDE; i++) {
+    const delay = i === 0 ? 0 : i * RIPPLE_DELAY + (Math.random() - 0.5) * 2 * RIPPLE_JITTER;
+    ship.pendingShots.push({ side, gun: i, delay });
+  }
+}
 
+/** Fires queued guns whose delay has run out. A ship that starts sinking loses its unfired guns. */
+export function updateGuns(state: GameState, dt: number): void {
+  for (const ship of state.ships) {
+    if (ship.sinkAge !== null) {
+      ship.pendingShots = [];
+      continue;
+    }
+    for (const shot of ship.pendingShots) {
+      shot.delay -= dt;
+      if (shot.delay <= 0) fireGun(state, ship, shot.side, shot.gun);
+    }
+    ship.pendingShots = ship.pendingShots.filter((shot) => shot.delay > 0);
+  }
+}
+
+/** One gun: the ball leaves from its port on the hull side, using the ship's current position. */
+function fireGun(state: GameState, ship: Ship, side: Side, gun: number): void {
   // Starboard is to the right of the heading (+PI/2 in screen space, y down).
-  const dir = ship.heading + (side === "starboard" ? Math.PI / 2 : -Math.PI / 2);
+  const sideSign = side === "starboard" ? 1 : -1;
+  const dir = ship.heading + sideSign * (Math.PI / 2);
   const fx = Math.cos(ship.heading);
   const fy = Math.sin(ship.heading);
+  const along = ((GUNS_PER_SIDE - 1) / 2 - gun) * GUN_SPACING; // gun 0 nearest the bow
+  const port = shipToWorld(ship, along, sideSign * HULL.halfBeam);
 
-  for (let i = 0; i < GUNS_PER_SIDE; i++) {
-    const offset = (i - (GUNS_PER_SIDE - 1) / 2) * 10; // spread guns along the hull
-    const a = dir + (Math.random() - 0.5) * SPREAD;
-    const life = (SHOT_RANGE / SHOT_SPEED) * (1 + (Math.random() - 0.5) * 2 * RANGE_SCATTER);
-    state.projectiles.push({
-      pos: { x: ship.pos.x + fx * offset, y: ship.pos.y + fy * offset },
-      // Shots inherit the ship's velocity.
-      vel: {
-        x: Math.cos(a) * SHOT_SPEED + fx * ship.speed,
-        y: Math.sin(a) * SHOT_SPEED + fy * ship.speed,
-      },
-      life,
-      maxLife: life,
-      owner: ship.id,
-      damage: SHOT_DAMAGE,
-    });
-  }
+  const a = dir + (Math.random() - 0.5) * SPREAD;
+  const life = (SHOT_RANGE / SHOT_SPEED) * (1 + (Math.random() - 0.5) * 2 * RANGE_SCATTER);
+  state.projectiles.push({
+    pos: port,
+    // Shots inherit the ship's velocity.
+    vel: {
+      x: Math.cos(a) * SHOT_SPEED + fx * ship.speed,
+      y: Math.sin(a) * SHOT_SPEED + fy * ship.speed,
+    },
+    life,
+    maxLife: life,
+    owner: ship.id,
+    damage: SHOT_DAMAGE,
+  });
+  muzzleBlast(state, ship, port, { x: Math.cos(dir), y: Math.sin(dir) });
 }
 
 /** Moves shots; any that run out of range fall into the sea with a splash. */

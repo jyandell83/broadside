@@ -4,7 +4,7 @@ import { startLoop } from "./systems/loop";
 import { render } from "./systems/render";
 import { adjustSails, steerShip, updateEnemyAI, updateShips } from "./systems/ships";
 import { createGameState, getPlayer } from "./systems/state";
-import { fireBroadside, updateProjectiles, updateSplashes } from "./systems/weapons";
+import { fireBroadside, updateGuns, updateProjectiles, updateSplashes } from "./systems/weapons";
 import { updateWind } from "./systems/wind";
 import { resolveCollisions } from "./systems/collision";
 import { updateCamera } from "./systems/camera";
@@ -46,12 +46,13 @@ function update(dt: number): void {
     const brace = (input.isDown("ArrowRight") ? 1 : 0) - (input.isDown("ArrowLeft") ? 1 : 0);
     steerShip(player, turn, dt);
     adjustSails(player, setSail, brace, dt);
-    if (input.isDown("KeyQ")) fireBroadside(state, player, "port");
-    if (input.isDown("KeyE")) fireBroadside(state, player, "starboard");
+    if (input.isDown("KeyQ")) fireBroadside(player, "port");
+    if (input.isDown("KeyE")) fireBroadside(player, "starboard");
   }
 
-  updateEnemyAI(state, dt, (ship, side) => fireBroadside(state, ship, side));
+  updateEnemyAI(state, dt, (ship, side) => fireBroadside(ship, side));
   updateShips(state, dt);
+  updateGuns(state, dt);
   updateProjectiles(state, dt);
   updateSplashes(state, dt);
   resolveCollisions(state);

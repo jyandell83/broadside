@@ -36,6 +36,13 @@ export interface Ship {
   listSide: number; // -1 or 1: which way the ship heels as it sinks
   sinkSpin: number; // rad/s the wreck slowly turns while sinking
   smokeTimer: number; // seconds until the next damage smoke puff
+  pendingShots: PendingShot[]; // guns of a broadside still waiting to fire (ripple fire)
+}
+
+export interface PendingShot {
+  side: Side;
+  gun: number; // index along the hull, 0 = nearest the bow
+  delay: number; // seconds until it fires
 }
 
 export interface Projectile {
@@ -62,7 +69,7 @@ export interface WakeParticle {
   size: number; // px radius at birth
 }
 
-export type ParticleKind = "flash" | "splinter" | "smoke" | "ember" | "bubble" | "wreckage";
+export type ParticleKind = "flash" | "splinter" | "smoke" | "gunsmoke" | "ember" | "bubble" | "wreckage";
 
 /** A short-lived visual effect (impacts, damage, sinking). Never affects gameplay. */
 export interface Particle {

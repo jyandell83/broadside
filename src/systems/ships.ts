@@ -1,6 +1,7 @@
 import type { GameState, Ship, Vec2 } from "../types";
 import { SHOT_RANGE } from "./weapons";
 import { SINK_DURATION } from "./effects";
+import { HULL, SHIP_SCALE } from "./hull";
 import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor } from "./wind";
 
 export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of sail
@@ -28,7 +29,7 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     brace: 0,
     offWind: 0,
     sailEfficiency: 0,
-    radius: 18,
+    radius: HULL.radius * SHIP_SCALE,
     hp: 100,
     maxHp: 100,
     reload: { port: 0, starboard: 0 },
@@ -39,6 +40,7 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     listSide: 1,
     sinkSpin: 0,
     smokeTimer: 0,
+    pendingShots: [],
   };
 }
 
