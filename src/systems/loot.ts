@@ -1,6 +1,7 @@
 import type { GameState, Ship } from "../types";
 import { rollWreckCargo } from "./cargo";
 import { getPlayer } from "./state";
+import { pushOutOfLand } from "./islands";
 import { PX_PER_KNOT, WIND_MAX_KNOTS } from "./wind";
 
 // Floating cargo is deliberately separate from combat: it isn't in ships or projectiles, so
@@ -43,6 +44,7 @@ export function updateLoot(state: GameState, dt: number): void {
     item.pos.y += (item.vel.y + Math.sin(state.wind.dir) * drift) * dt;
     item.pos.x = Math.min(state.world.width - 10, Math.max(10, item.pos.x));
     item.pos.y = Math.min(state.world.height - 10, Math.max(10, item.pos.y));
+    pushOutOfLand(state.islands, item.pos, 8); // cargo washes along the coast, never ashore
   }
 
   const player = getPlayer(state);

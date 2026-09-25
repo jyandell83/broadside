@@ -11,6 +11,8 @@ import { updateCamera } from "./systems/camera";
 import { updateWake } from "./systems/wake";
 import { updateEffects } from "./systems/effects";
 import { dropWreckCargo, updateLoot } from "./systems/loot";
+import { dock, dockablePort, setSail } from "./systems/ports";
+import { createPortPanel } from "./ui/portPanel";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const ctx = canvas?.getContext("2d");
@@ -18,6 +20,10 @@ if (!canvas || !ctx) throw new Error("Canvas #game not found");
 
 const input = new Input();
 let state = createGameState(window.innerWidth, window.innerHeight);
+const portPanel = createPortPanel(() => {
+  const player = getPlayer(state);
+  if (player) setSail(player);
+});
 
 function resize(): void {
   if (!canvas || !ctx) return;
@@ -41,7 +47,13 @@ function update(dt: number): void {
   updateWind(state.wind, dt);
 
   const player = getPlayer(state);
-  if (player) {
+  // F docks inside a port's docking area, and sets sail again when docked.
+  if (player && input.wasPressed("KeyF")) {
+    const port = dockablePort(state, player);
+    if (player.docked) setSail(player);
+    else if (port) dock(player, port);
+  }
+  if (player && !player.docked) {
     const turn = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0);
     const setSail = (input.isDown("KeyW") ? 1 : 0) - (input.isDown("KeyS") ? 1 : 0);
     const brace = (input.isDown("ArrowRight") ? 1 : 0) - (input.isDown("ArrowLeft") ? 1 : 0);
@@ -63,6 +75,7 @@ function update(dt: number): void {
   updateEffects(state, dt);
   updateLoot(state, dt);
   updateCamera(state, dt);
+  portPanel.sync(state);
 
   input.endFrame();
 }

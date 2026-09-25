@@ -114,6 +114,15 @@ export function cannonImpact(state: GameState, ship: Ship, ballPos: Vec2, ballVe
   }
 }
 
+/** A cannonball thudding into an island: a puff of sand and earth. */
+export function landImpact(state: GameState, at: Vec2): void {
+  for (let i = 0; i < 3; i++) {
+    const a = rand(0, Math.PI * 2);
+    const v = rand(10, 35);
+    spawn(state, "dust", at, { x: Math.cos(a) * v, y: Math.sin(a) * v }, rand(0.5, 0.9), rand(2.5, 4), 2);
+  }
+}
+
 function addShake(state: GameState, amount: number): void {
   state.shake = Math.min(SHAKE_MAX, state.shake + amount);
 }

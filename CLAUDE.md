@@ -42,7 +42,7 @@ Do not introduce libraries unless they provide substantial value.
 There is no test runner yet.
 
 ## Code layout
-- `src/main.ts` wires everything together. Its `update(dt)` function sets the order of systems each tick: wind → input → enemy AI → ships → guns → projectiles → splashes → collision → wake → effects → loot → camera.
+- `src/main.ts` wires everything together. Its `update(dt)` function sets the order of systems each tick: wind → input → enemy AI → ships → guns → projectiles → splashes → collision → wake → effects → loot → camera → port panel sync. The F key (dock / set sail) is handled before movement.
 - `src/types.ts` holds the shared data shapes (`Ship`, `Projectile`, `GameState`). Entities are plain data objects; the systems in `src/systems/` are functions that read and mutate `GameState`.
 - `systems/loop.ts` runs a fixed 60 Hz simulation step and renders on every animation frame. Pass `dt` in seconds and keep gameplay code frame-rate independent.
 - Entities are removed by filtering:
@@ -61,6 +61,16 @@ There is no test runner yet.
   - `render` draws the world inside a camera translate, then draws the HUD and the off-screen enemy arrows in screen space. Use `worldToScreen` to convert between the two.
   - The wake (`systems/wake.ts`, `state.wake`) and the bow wave are purely visual and scale with speed; they never feed back into gameplay.
   - Broadsides ripple-fire. `fireBroadside` starts the reload and queues `ship.pendingShots`; `updateGuns` fires each gun from the ship's current position at its gun port, with a `muzzleBlast` (flash, gun smoke, slight recoil). A sinking ship drops its queued shots.
+  - Islands (`systems/islands.ts`, fixed data in `ISLANDS`):
+    - The coast is `radius × (1 + Σ amp·sin(k·θ + phase))` around a centre, so islands are star-shaped: no deep hooked harbours or overhangs. Those would need polygon collision.
+    - Rendering (`islandPath`), land collision (`pushOutOfLand`, `isOnLand`) and port placement all use `coastRadius`, so they always agree.
+    - Ships are pushed out radially. `updateShips` then drains speed and swings the bow along the shore in proportion to how squarely it hit, so ships slide off the coast rather than sticking.
+    - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
+  - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that. Future per-port data (prices, services) goes on the def.
+    - F docks inside a port's docking area and sets sail when docked.
+    - `ship.docked` disables steering, sails and firing, and eases the ship into its berth.
+    - Enemy AI won't fire at a docked player.
+  - The Port screen is a DOM panel (`src/ui/portPanel.ts`, styled in `style.css`), not canvas. `portPanel.sync(state)` runs each tick and shows it while the player is docked, reading `ship.cargo` directly. Put future menu-style UI (trading and so on) in the DOM too.
   - Loot: `updateShips` returns the wrecks it removed this tick, and `main.ts` passes enemy wrecks to `dropWreckCargo`. Loot therefore spawns where the wreck finally went down, and is tied to the removal, not the sinking animation.
     - `state.loot` is not a collider. Only the player's pickup check in `updateLoot` reads it, by sailing within `radius + PICKUP_REACH`.
     - Collected cargo goes into `ship.cargo`, the hold. The Cargo Hold panel is drawn bottom-left.

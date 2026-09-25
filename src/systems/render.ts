@@ -1,4 +1,4 @@
-import type { GameState, Particle, Ship } from "../types";
+import type { GameState, Island, Particle, Port, Ship, Vec2 } from "../types";
 import { getPlayer } from "./state";
 import { SPLASH_DURATION } from "./weapons";
 import { worldToScreen } from "./camera";
@@ -6,6 +6,8 @@ import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
 import { SHIP_SCALE } from "./hull";
 import { CARGO, CARGO_IDS, cargoText, type CargoDef } from "./cargo";
 import { PICKUP_FX_DURATION, SURFACE_TIME } from "./loot";
+import { coastPoint, coastRadius, maxRadius } from "./islands";
+import { dockablePort, getPort } from "./ports";
 import { MAX_SPEED } from "./ships";
 import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
@@ -27,6 +29,20 @@ const COLORS = {
   wood: "#c9a26b",
   wreckage: "#6b4a2b",
   scorch: "#1a120c",
+  // Islands and ports.
+  shallowsOuter: "rgba(40, 110, 130, 0.22)",
+  shallowsInner: "rgba(80, 160, 165, 0.28)",
+  beach: "#d6c28f",
+  grass: "#5d7c46",
+  hills: "#4c6a3a",
+  rock: "#6f6e55",
+  trees: "#3b5a2f",
+  islandLabel: "rgba(235, 240, 225, 0.55)",
+  pier: "#8b6a44",
+  roof: "#a4553a",
+  roofMain: "#8e3f2a",
+  flag: "#e8c35a",
+  port: "#f5d77a",
   sailEdge: "rgba(30, 20, 10, 0.45)",
   shot: "#f2f2f2",
   hud: "#e8e8e8",
@@ -59,6 +75,8 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   drawWake(ctx, state);
   drawParticles(ctx, state, "water");
+  for (const island of state.islands) drawIsland(ctx, state, island);
+  for (const port of state.ports) drawPort(ctx, state, port);
   drawLoot(ctx, state);
   drawWindStreaks(ctx, state);
   for (const ship of state.ships) drawShip(ctx, ship, state);
@@ -82,6 +100,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   drawHud(ctx, state);
   drawWindIndicator(ctx, state);
   drawCargoHold(ctx, state);
+  drawPortPrompt(ctx, state);
 }
 
 /** Top-left corner of the view in world coordinates. */
@@ -332,6 +351,12 @@ function drawParticles(ctx: CanvasRenderingContext2D, state: GameState, layer: "
         ctx.arc(p.pos.x, p.pos.y, p.size * (1 + 1.6 * t), 0, Math.PI * 2);
         ctx.fill();
         break;
+      case "dust": // cannonball hitting land
+        ctx.fillStyle = `rgba(190, 165, 120, ${0.55 * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, p.size * (1 + 1.5 * t), 0, Math.PI * 2);
+        ctx.fill();
+        break;
       case "ember":
         ctx.fillStyle = `rgba(255, 170, 70, ${1 - t})`;
         ctx.fillRect(p.pos.x - 0.75, p.pos.y - 0.75, 1.5, 1.5);
@@ -429,6 +454,221 @@ function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState):
     ctx.lineTo(x2, y2);
     ctx.stroke();
   }
+}
+
+const ISLAND_SEGMENTS = 96;
+
+/** Traces an island outline: the coast pushed out by `offset` px, or scaled by `scale` toward the centre. */
+function islandPath(ctx: CanvasRenderingContext2D, island: Island, offset: number, scale = 1): void {
+  ctx.beginPath();
+  for (let i = 0; i <= ISLAND_SEGMENTS; i++) {
+    const a = (i / ISLAND_SEGMENTS) * Math.PI * 2;
+    const r = coastRadius(island, a) * scale + offset;
+    const x = island.center.x + Math.cos(a) * r;
+    const y = island.center.y + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+function isVisible(state: GameState, p: Vec2, r: number): boolean {
+  const { left, top } = viewOrigin(state);
+  return p.x + r > left && p.x - r < left + state.viewport.width && p.y + r > top && p.y - r < top + state.viewport.height;
+}
+
+/** Shallows, surf, beach, grassland, hills and trees, all derived from the island's coastline. */
+function drawIsland(ctx: CanvasRenderingContext2D, state: GameState, island: Island): void {
+  if (!isVisible(state, island.center, maxRadius(island) + 40)) return;
+
+  ctx.fillStyle = COLORS.shallowsOuter;
+  islandPath(ctx, island, 36);
+  ctx.fill();
+  ctx.fillStyle = COLORS.shallowsInner;
+  islandPath(ctx, island, 16);
+  ctx.fill();
+
+  ctx.strokeStyle = `rgba(230, 244, 250, ${0.22 + 0.08 * Math.sin(state.time * 1.3 + island.radius)})`;
+  ctx.lineWidth = 1.5;
+  islandPath(ctx, island, 5);
+  ctx.stroke();
+
+  ctx.fillStyle = COLORS.beach;
+  islandPath(ctx, island, 0);
+  ctx.fill();
+  ctx.fillStyle = COLORS.grass;
+  islandPath(ctx, island, -14);
+  ctx.fill();
+  ctx.fillStyle = COLORS.hills;
+  islandPath(ctx, island, 0, 0.55);
+  ctx.fill();
+  if (island.radius > 200) {
+    ctx.fillStyle = COLORS.rock;
+    islandPath(ctx, island, 0, 0.22);
+    ctx.fill();
+  }
+
+  // Scattered trees, at stable positions inside the grassland.
+  const seed = Math.round(island.center.x + island.center.y);
+  const count = Math.round(island.radius / 7);
+  ctx.fillStyle = COLORS.trees;
+  for (let i = 0; i < count; i++) {
+    const a = hash(i, seed, 11) * Math.PI * 2;
+    const r = (coastRadius(island, a) - 22) * Math.sqrt(hash(i, seed, 12));
+    const size = 2.5 + 2.5 * hash(i, seed, 13);
+    ctx.beginPath();
+    ctx.arc(island.center.x + Math.cos(a) * r, island.center.y + Math.sin(a) * r, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (!state.ports.some((p) => p.islandId === island.id)) {
+    ctx.font = "italic 13px Georgia, serif";
+    ctx.textAlign = "center";
+    ctx.fillStyle = COLORS.islandLabel;
+    ctx.fillText(island.name, island.center.x, island.center.y + 4);
+    ctx.textAlign = "left";
+  }
+}
+
+/** Pier, settlement, flag, harbour buoys, docking-area ring and name: "that's a port". */
+function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): void {
+  const island = state.islands.find((i) => i.id === port.islandId);
+  if (!island || !isVisible(state, port.dockZone.center, 400)) return;
+  const a = port.angle;
+  const ux = Math.cos(a);
+  const uy = Math.sin(a);
+  const sx = -uy; // across the pier
+  const sy = ux;
+
+  // Settlement: a cluster of roofs just inland of the pier.
+  for (let j = -3; j <= 3; j++) {
+    const ang = a + j * 0.11;
+    const inland = 26 + (Math.abs(j) % 2) * 20 + (j === 0 ? 14 : 0);
+    const p = coastPoint(island, ang, -inland);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang + (j % 3) * 0.2);
+    ctx.fillStyle = j === 0 ? COLORS.roofMain : COLORS.roof;
+    const w = j === 0 ? 16 : 11;
+    ctx.fillRect(-w / 2, -5, w, 10);
+    ctx.strokeStyle = "rgba(40, 20, 10, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); // roof ridge
+    ctx.moveTo(-w / 2, 0);
+    ctx.lineTo(w / 2, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Pier: planks out from the shore, with posts along both sides.
+  const half = 5;
+  ctx.fillStyle = COLORS.pier;
+  ctx.beginPath();
+  ctx.moveTo(port.pierBase.x + sx * half, port.pierBase.y + sy * half);
+  ctx.lineTo(port.pierEnd.x + sx * half, port.pierEnd.y + sy * half);
+  ctx.lineTo(port.pierEnd.x - sx * half, port.pierEnd.y - sy * half);
+  ctx.lineTo(port.pierBase.x - sx * half, port.pierBase.y - sy * half);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(40, 25, 12, 0.55)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const len = Math.hypot(port.pierEnd.x - port.pierBase.x, port.pierEnd.y - port.pierBase.y);
+  ctx.fillStyle = COLORS.yard;
+  for (let d = 12; d <= len; d += 12) {
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(port.pierBase.x + ux * d + sx * half * side, port.pierBase.y + uy * d + sy * half * side, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Flag on the shore beside the pier.
+  const pole = coastPoint(island, a - 0.09, -4);
+  const wave = Math.sin(state.time * 5) * 2;
+  ctx.fillStyle = COLORS.flag;
+  ctx.beginPath();
+  ctx.moveTo(pole.x, pole.y);
+  ctx.lineTo(pole.x + ux * 12 + sx * wave, pole.y + uy * 12 + sy * wave);
+  ctx.lineTo(pole.x + ux * 2 + sx * 5, pole.y + uy * 2 + sy * 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = COLORS.yard;
+  ctx.beginPath();
+  ctx.arc(pole.x, pole.y, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Docking area: a slowly turning dashed ring, brighter when the player is inside it.
+  const player = getPlayer(state);
+  const inside = player && !player.docked && dockablePort(state, player) === port;
+  ctx.save();
+  ctx.setLineDash([7, 9]);
+  ctx.lineDashOffset = -state.time * 8;
+  ctx.strokeStyle = inside ? "rgba(245, 215, 122, 0.55)" : "rgba(245, 215, 122, 0.2)";
+  ctx.lineWidth = inside ? 2 : 1.5;
+  ctx.beginPath();
+  ctx.arc(port.dockZone.center.x, port.dockZone.center.y, port.dockZone.radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // Harbour buoys either side of the approach: red to port, green to starboard (coming in).
+  const zc = port.dockZone.center;
+  const rz = port.dockZone.radius;
+  const buoys: [number, string][] = [
+    [-1, "#c8433a"],
+    [1, "#3f9a5a"],
+  ];
+  for (const [side, color] of buoys) {
+    const bob = Math.sin(state.time * 2 + side) * 0.8;
+    const bx = zc.x + ux * rz * 0.9 + sx * rz * 0.75 * side;
+    const by = zc.y + uy * rz * 0.9 + sy * rz * 0.75 * side + bob;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(240, 240, 235, 0.7)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Name above the settlement.
+  const label = coastPoint(island, a, -78);
+  ctx.font = "600 15px Georgia, serif";
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(10, 20, 15, 0.6)";
+  ctx.fillText(port.name, label.x + 1, label.y + 1);
+  ctx.fillStyle = COLORS.port;
+  ctx.fillText(port.name, label.x, label.y);
+  ctx.textAlign = "left";
+}
+
+/** Bottom-centre pill: "Press F to dock" in a docking area, or the docked banner. */
+function drawPortPrompt(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const player = getPlayer(state);
+  if (!player || player.sinkAge !== null) return;
+  let text: string | null = null;
+  if (player.docked) {
+    text = `Docked at ${getPort(state, player.docked.portId)?.name ?? "port"}`;
+  } else {
+    const port = dockablePort(state, player);
+    if (port) text = `Press F to dock at ${port.name}`;
+  }
+  if (!text) return;
+  ctx.font = "600 14px system-ui, sans-serif";
+  const w = ctx.measureText(text).width + 28;
+  const x = state.viewport.width / 2 - w / 2;
+  const y = state.viewport.height - 56;
+  ctx.fillStyle = "rgba(6, 15, 24, 0.75)";
+  ctx.strokeStyle = "rgba(232, 195, 90, 0.5)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 30, 15);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = COLORS.port;
+  ctx.textAlign = "center";
+  ctx.fillText(text, state.viewport.width / 2, y + 20);
+  ctx.textAlign = "left";
 }
 
 /**
@@ -626,26 +866,27 @@ function drawCargoHold(ctx: CanvasRenderingContext2D, state: GameState): void {
 const INDICATOR_INSET = 22; // px from the screen edge
 const INDICATOR_SIZE = 9;
 
-/** A small arrow at the screen edge pointing toward each off-screen enemy. */
-function drawOffscreenIndicators(ctx: CanvasRenderingContext2D, state: GameState): void {
+/** Where a line from the screen centre toward an off-screen point meets the inset border. */
+function edgeMarker(state: GameState, p: Vec2, margin: number): { x: number; y: number; angle: number } | null {
   const { width, height } = state.viewport;
+  if (p.x > -margin && p.x < width + margin && p.y > -margin && p.y < height + margin) return null;
   const cx = width / 2;
   const cy = height / 2;
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  const t = Math.min((cx - INDICATOR_INSET) / Math.abs(dx || 1e-6), (cy - INDICATOR_INSET) / Math.abs(dy || 1e-6));
+  return { x: cx + dx * t, y: cy + dy * t, angle: Math.atan2(dy, dx) };
+}
+
+/** Edge-of-screen pointers: a red arrow per off-screen enemy, a gold marker per off-screen port. */
+function drawOffscreenIndicators(ctx: CanvasRenderingContext2D, state: GameState): void {
   for (const ship of state.ships) {
     if (ship.team !== "enemy" || ship.sinkAge !== null) continue;
-    const p = worldToScreen(state, ship.pos);
-    const r = ship.radius;
-    if (p.x > -r && p.x < width + r && p.y > -r && p.y < height + r) continue;
-
-    // Slide from the screen centre toward the ship until hitting the inset border.
-    const dx = p.x - cx;
-    const dy = p.y - cy;
-    const t = Math.min((cx - INDICATOR_INSET) / Math.abs(dx || 1e-6), (cy - INDICATOR_INSET) / Math.abs(dy || 1e-6));
-    const angle = Math.atan2(dy, dx);
-
+    const m = edgeMarker(state, worldToScreen(state, ship.pos), ship.radius);
+    if (!m) continue;
     ctx.save();
-    ctx.translate(cx + dx * t, cy + dy * t);
-    ctx.rotate(angle);
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.angle);
     ctx.globalAlpha = 0.7;
     ctx.fillStyle = COLORS.enemy;
     ctx.strokeStyle = COLORS.offscreenEdge;
@@ -659,16 +900,47 @@ function drawOffscreenIndicators(ctx: CanvasRenderingContext2D, state: GameState
     ctx.stroke();
     ctx.restore();
   }
+
+  for (const port of state.ports) {
+    const m = edgeMarker(state, worldToScreen(state, port.pierEnd), 40);
+    if (!m) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    ctx.translate(m.x, m.y);
+    ctx.fillStyle = COLORS.port;
+    ctx.strokeStyle = COLORS.offscreenEdge;
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(6, 0);
+    ctx.lineTo(0, 6);
+    ctx.lineTo(-6, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Name sits on the inward side of the marker so it never runs off-screen.
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.textAlign = Math.cos(m.angle) > 0.3 ? "right" : Math.cos(m.angle) < -0.3 ? "left" : "center";
+    const tx = Math.cos(m.angle) > 0.3 ? -10 : Math.cos(m.angle) < -0.3 ? 10 : 0;
+    const ty = Math.sin(m.angle) > 0.3 ? -10 : Math.sin(m.angle) < -0.3 ? 18 : 4;
+    ctx.fillText(port.name, tx, ty);
+    ctx.textAlign = "left";
+    ctx.restore();
+  }
 }
 
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const player = getPlayer(state);
   ctx.font = "14px system-ui, sans-serif";
   ctx.fillStyle = COLORS.hudDim;
-  ctx.fillText("A/D rudder · W/S raise/furl sails · ←/→ brace yards · Q/E fire port/starboard", 12, 22);
+  ctx.fillText("A/D rudder · W/S raise/furl sails · ←/→ brace yards · Q/E fire port/starboard · F dock", 12, 22);
   ctx.fillStyle = COLORS.hud;
   if (!player || player.sinkAge !== null) {
     ctx.fillText(player ? "She's going down!" : "Sunk! Press R to restart.", 12, 46);
+    return;
+  }
+  if (player.docked) {
+    // In port the sailing readouts don't apply; the Port panel and banner say where we are.
+    ctx.fillText(`In port · ${getPort(state, player.docked.portId)?.name ?? ""}`, 12, 46);
     return;
   }
 

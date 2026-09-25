@@ -1,6 +1,8 @@
 import type { GameState } from "../types";
 import { autoBrace, createShip } from "./ships";
 import { createWind } from "./wind";
+import { ISLANDS } from "./islands";
+import { createPorts } from "./ports";
 
 // World size as a tuning knob: base size × WORLD_SCALE (keeps the 4:3 proportions).
 // Camera limits, ship boundaries, spawns and the sea texture all read state.world.
@@ -16,6 +18,8 @@ export function createGameState(viewportWidth: number, viewportHeight: number): 
     viewport: { width: viewportWidth, height: viewportHeight },
     camera: { x: 0, y: 0 },
     cameraLead: { x: 0, y: 0 },
+    islands: ISLANDS,
+    ports: createPorts(ISLANDS),
     ships: [],
     projectiles: [],
     splashes: [],

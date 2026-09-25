@@ -2,6 +2,8 @@ import type { GameState, Ship, Vec2 } from "../types";
 import { SHOT_RANGE } from "./weapons";
 import { SINK_DURATION } from "./effects";
 import { HULL, SHIP_SCALE } from "./hull";
+import { pushOutOfLand } from "./islands";
+import { updateDocked } from "./ports";
 import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor } from "./wind";
 
 export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of sail
@@ -42,12 +44,13 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     smokeTimer: 0,
     pendingShots: [],
     cargo: {},
+    docked: null,
   };
 }
 
 /** turn: -1 (to port) .. 1 (to starboard). */
 export function steerShip(ship: Ship, turn: number, dt: number): void {
-  if (ship.sinkAge !== null) return;
+  if (ship.sinkAge !== null || ship.docked) return;
   const r = Math.min(1, ship.speed / MAX_SPEED);
   const rudder = MIN_STEERAGE + (1 - MIN_STEERAGE) * r;
   const fade = (PIVOT_GONE_ABOVE - r) / (PIVOT_GONE_ABOVE - PIVOT_FULL_BELOW);
@@ -58,7 +61,7 @@ export function steerShip(ship: Ship, turn: number, dt: number): void {
 
 /** setDelta: +1 to raise sail, -1 to furl. braceDelta: +1 swings the yards toward starboard, -1 toward port. */
 export function adjustSails(ship: Ship, setDelta: number, braceDelta: number, dt: number): void {
-  if (ship.sinkAge !== null) return;
+  if (ship.sinkAge !== null || ship.docked) return;
   ship.sails = Math.min(1, Math.max(0, ship.sails + setDelta * SAIL_RATE * dt));
   ship.brace = Math.min(BRACE_LIMIT, Math.max(-BRACE_LIMIT, ship.brace + braceDelta * BRACE_RATE * dt));
 }
@@ -77,6 +80,10 @@ export function startSinking(ship: Ship): void {
 }
 
 const SINK_DRAG = 0.8; // how quickly a wreck loses way
+// Arcade grounding: running into land costs speed in proportion to how squarely you hit, and
+// the bow is swung along the shore so the ship slides off rather than sticking.
+const GROUNDING_DRAG = 3; // per second, at a head-on hit
+const DEFLECT_RATE = 1.5; // rad/s the bow is turned toward the shoreline, at a head-on hit
 const WRECK_DRIFT = 0.04; // fraction of wind speed a wreck is pushed downwind
 
 /** Moves ships. Returns the wrecks that finished sinking and were removed this tick. */
@@ -91,6 +98,14 @@ export function updateShips(state: GameState, dt: number): Ship[] {
       const drift = state.wind.strength * WIND_MAX_KNOTS * PX_PER_KNOT * WRECK_DRIFT;
       ship.pos.x += (Math.cos(ship.heading) * ship.speed + Math.cos(state.wind.dir) * drift) * dt;
       ship.pos.y += (Math.sin(ship.heading) * ship.speed + Math.sin(state.wind.dir) * drift) * dt;
+      pushOutOfLand(state.islands, ship.pos, ship.radius);
+      continue;
+    }
+
+    if (ship.docked) {
+      updateDocked(state, ship, dt);
+      ship.reload.port = Math.max(0, ship.reload.port - dt);
+      ship.reload.starboard = Math.max(0, ship.reload.starboard - dt);
       continue;
     }
 
@@ -104,6 +119,17 @@ export function updateShips(state: GameState, dt: number): Ship[] {
 
     ship.pos.x += Math.cos(ship.heading) * ship.speed * dt;
     ship.pos.y += Math.sin(ship.heading) * ship.speed * dt;
+
+    // Land is solid: pushed back out to the coast, a ship is deflected along it and loses way.
+    const shore = pushOutOfLand(state.islands, ship.pos, ship.radius);
+    if (shore) {
+      const rel = Math.atan2(Math.sin(ship.heading - Math.atan2(shore.y, shore.x)), Math.cos(ship.heading - Math.atan2(shore.y, shore.x)));
+      const into = -Math.cos(rel); // 1 = head-on into the coast, 0 = running along it, <0 = leaving
+      if (into > 0) {
+        ship.speed *= Math.exp(-GROUNDING_DRAG * into * dt);
+        ship.heading -= (rel >= 0 ? 1 : -1) * DEFLECT_RATE * into * dt;
+      }
+    }
 
     // Keep ships inside the world.
     ship.pos.x = Math.min(state.world.width - ship.radius, Math.max(ship.radius, ship.pos.x));
@@ -120,7 +146,8 @@ export function updateShips(state: GameState, dt: number): Ship[] {
 
 /** Placeholder enemy behaviour: sail in circles and fire when the player is abeam. */
 export function updateEnemyAI(state: GameState, dt: number, fire: (ship: Ship, side: "port" | "starboard") => void): void {
-  const player = state.ships.find((s) => s.team === "player" && s.sinkAge === null);
+  // Enemies leave a docked player alone: ports are safe harbour.
+  const player = state.ships.find((s) => s.team === "player" && s.sinkAge === null && !s.docked);
   for (const ship of state.ships) {
     if (ship.team !== "enemy" || ship.sinkAge !== null) continue;
     ship.sails = 1;

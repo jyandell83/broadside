@@ -19,7 +19,7 @@ const RIPPLE_JITTER = 0.015; // ± seconds, so the rhythm isn't mechanical
 
 /** Starts a broadside: reload begins now, and the guns fire in quick succession (see updateGuns). */
 export function fireBroadside(ship: Ship, side: Side): void {
-  if (ship.reload[side] > 0 || ship.sinkAge !== null) return;
+  if (ship.reload[side] > 0 || ship.sinkAge !== null || ship.docked) return;
   ship.reload[side] = RELOAD_TIME;
   for (let i = 0; i < GUNS_PER_SIDE; i++) {
     const delay = i === 0 ? 0 : i * RIPPLE_DELAY + (Math.random() - 0.5) * 2 * RIPPLE_JITTER;
