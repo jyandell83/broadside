@@ -88,7 +88,10 @@ const SINK_DRAG = 0.8; // how quickly a wreck loses way
 // Arcade grounding: running into land costs speed in proportion to how squarely you hit, and
 // the bow is swung along the shore so the ship slides off rather than sticking.
 const GROUNDING_DRAG = 3; // per second, at a head-on hit
-const DEFLECT_RATE = 1.5; // rad/s the bow is turned toward the shoreline, at a head-on hit
+// Kept below the helm's weakest turn rate (TURN_RATE × MIN_STEERAGE-ish ≈ 0.7 rad/s), so a
+// player steering away from land always wins; in a corner between blobs, a stronger deflection
+// could hold the bow against the shore.
+const DEFLECT_RATE = 0.6; // rad/s the bow is turned toward the shoreline, at a head-on hit
 const WRECK_DRIFT = 0.04; // fraction of wind speed a wreck is pushed downwind
 
 /** Moves ships. Returns the wrecks that finished sinking and were removed this tick. */

@@ -72,7 +72,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   drawWake(ctx, state);
   drawParticles(ctx, state, "water");
-  for (const island of state.islands) drawIsland(ctx, state, island);
+  for (const blobs of landmasses(state.islands)) drawLandmass(ctx, state, blobs);
   for (const port of state.ports) drawPort(ctx, state, port);
   drawLoot(ctx, state);
   drawWindStreaks(ctx, state);
@@ -454,13 +454,17 @@ function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState):
 }
 
 const ISLAND_SEGMENTS = 96;
+const BEACH_WIDTH = 14; // px of sand between the waterline and the grass
 
-/** Traces an island outline: the coast pushed out by `offset` px, or scaled by `scale` toward the centre. */
-function islandPath(ctx: CanvasRenderingContext2D, island: Island, offset: number, scale = 1): void {
+/**
+ * Traces an island outline: the coast pushed out by `offset` px (or by a per-segment offset), or
+ * scaled by `scale` toward the centre.
+ */
+function islandPath(ctx: CanvasRenderingContext2D, island: Island, offset: number | number[], scale = 1): void {
   ctx.beginPath();
   for (let i = 0; i <= ISLAND_SEGMENTS; i++) {
     const a = (i / ISLAND_SEGMENTS) * Math.PI * 2;
-    const r = coastRadius(island, a) * scale + offset;
+    const r = coastRadius(island, a) * scale + (typeof offset === "number" ? offset : offset[i % ISLAND_SEGMENTS]!);
     const x = island.center.x + Math.cos(a) * r;
     const y = island.center.y + Math.sin(a) * r;
     if (i === 0) ctx.moveTo(x, y);
@@ -475,56 +479,114 @@ function isVisible(state: GameState, p: Vec2, r: number): boolean {
 }
 
 /** Shallows, surf, beach, grassland, hills and trees, all derived from the island's coastline. */
-function drawIsland(ctx: CanvasRenderingContext2D, state: GameState, island: Island): void {
-  if (!isVisible(state, island.center, maxRadius(island) + 40)) return;
+/**
+ * Draws one landmass (a single island, or overlapping blobs sharing a `landmass`): shallows,
+ * surf, beach, grassland, hills and trees. Each layer is drawn across every blob before the next,
+ * so blobs merge into one coastline.
+ */
+function drawLandmass(ctx: CanvasRenderingContext2D, state: GameState, blobs: Island[]): void {
+  if (!blobs.some((b) => isVisible(state, b.center, maxRadius(b) + 40))) return;
+  const layer = (fill: string, offset: number, scale = 1) => {
+    ctx.fillStyle = fill;
+    for (const b of blobs) {
+      islandPath(ctx, b, offset, scale);
+      ctx.fill();
+    }
+  };
 
-  ctx.fillStyle = COLORS.shallowsOuter;
-  islandPath(ctx, island, 36);
-  ctx.fill();
-  ctx.fillStyle = COLORS.shallowsInner;
-  islandPath(ctx, island, 16);
-  ctx.fill();
-
-  ctx.strokeStyle = `rgba(230, 244, 250, ${0.22 + 0.08 * Math.sin(state.time * 1.3 + island.radius)})`;
+  layer(COLORS.shallowsOuter, 36);
+  layer(COLORS.shallowsInner, 16);
+  ctx.strokeStyle = `rgba(230, 244, 250, ${0.22 + 0.08 * Math.sin(state.time * 1.3 + blobs[0]!.radius)})`;
   ctx.lineWidth = 1.5;
-  islandPath(ctx, island, 5);
-  ctx.stroke();
-
-  ctx.fillStyle = COLORS.beach;
-  islandPath(ctx, island, 0);
-  ctx.fill();
+  for (const b of blobs) {
+    islandPath(ctx, b, 5); // parts that fall inside a neighbouring blob are covered by its beach
+    ctx.stroke();
+  }
+  layer(COLORS.beach, 0);
+  // Grass: in from the waterline, except where this blob's coast is buried inside a neighbouring
+  // blob. There it reaches out into the neighbour instead, so no sand shows inside the land.
   ctx.fillStyle = COLORS.grass;
-  islandPath(ctx, island, -14);
-  ctx.fill();
+  for (const b of blobs) {
+    islandPath(ctx, b, grassOffsets(b, blobs));
+    ctx.fill();
+  }
+  // Hills, skipping the small smoothing blobs, whose hills would dot the grass with dark spots.
   ctx.fillStyle = COLORS.hills;
-  islandPath(ctx, island, 0, 0.55);
-  ctx.fill();
-  if (island.radius > 200) {
-    ctx.fillStyle = COLORS.rock;
-    islandPath(ctx, island, 0, 0.22);
+  for (const b of blobs) {
+    if (b.radius < 60) continue;
+    islandPath(ctx, b, 0, 0.55);
+    ctx.fill();
+  }
+  ctx.fillStyle = COLORS.rock;
+  for (const b of blobs) {
+    if (b.radius <= 200) continue;
+    islandPath(ctx, b, 0, 0.22);
     ctx.fill();
   }
 
   // Scattered trees, at stable positions inside the grassland.
-  const seed = Math.round(island.center.x + island.center.y);
-  const count = Math.round(island.radius / 7);
   ctx.fillStyle = COLORS.trees;
-  for (let i = 0; i < count; i++) {
-    const a = hash(i, seed, 11) * Math.PI * 2;
-    const r = (coastRadius(island, a) - 22) * Math.sqrt(hash(i, seed, 12));
-    const size = 2.5 + 2.5 * hash(i, seed, 13);
-    ctx.beginPath();
-    ctx.arc(island.center.x + Math.cos(a) * r, island.center.y + Math.sin(a) * r, size, 0, Math.PI * 2);
-    ctx.fill();
+  for (const b of blobs) {
+    const seed = Math.round(b.center.x + b.center.y);
+    const count = Math.round(b.radius / 7);
+    for (let i = 0; i < count; i++) {
+      const a = hash(i, seed, 11) * Math.PI * 2;
+      const r = (coastRadius(b, a) - 22) * Math.sqrt(hash(i, seed, 12));
+      const size = 2.5 + 2.5 * hash(i, seed, 13);
+      ctx.beginPath();
+      ctx.arc(b.center.x + Math.cos(a) * r, b.center.y + Math.sin(a) * r, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
-  if (!state.ports.some((p) => p.islandId === island.id)) {
+  // A name for landmasses without a port (a port shows its own name).
+  if (!state.ports.some((p) => blobs.some((b) => b.id === p.islandId))) {
+    const cx = blobs.reduce((t, b) => t + b.center.x, 0) / blobs.length;
+    const cy = blobs.reduce((t, b) => t + b.center.y, 0) / blobs.length;
     ctx.font = "italic 13px Georgia, serif";
     ctx.textAlign = "center";
     ctx.fillStyle = COLORS.islandLabel;
-    ctx.fillText(island.name, island.center.x, island.center.y + 4);
+    ctx.fillText(blobs[0]!.name, cx, cy + 4);
     ctx.textAlign = "left";
   }
+}
+
+const grassOffsetCache = new WeakMap<Island, number[]>();
+
+/**
+ * Per-segment grass edge for one blob of a landmass, relative to its coast: -BEACH_WIDTH where
+ * the coast is open water, rising to +BEACH_WIDTH where it lies deep inside a neighbouring blob
+ * (blending in between). Islands don't move, so it's worked out once per blob.
+ */
+function grassOffsets(blob: Island, blobs: Island[]): number[] {
+  const cached = grassOffsetCache.get(blob);
+  if (cached) return cached;
+  const offsets: number[] = [];
+  for (let i = 0; i < ISLAND_SEGMENTS; i++) {
+    const c = coastPoint(blob, (i / ISLAND_SEGMENTS) * Math.PI * 2);
+    let depth = 0; // how far this coast point lies inside a neighbouring blob
+    for (const other of blobs) {
+      if (other === blob) continue;
+      const dx = c.x - other.center.x;
+      const dy = c.y - other.center.y;
+      depth = Math.max(depth, coastRadius(other, Math.atan2(dy, dx)) - Math.hypot(dx, dy));
+    }
+    offsets.push(Math.max(-BEACH_WIDTH, Math.min(BEACH_WIDTH, depth - BEACH_WIDTH)));
+  }
+  grassOffsetCache.set(blob, offsets);
+  return offsets;
+}
+
+/** Islands grouped into landmasses, in their original order. */
+function landmasses(islands: Island[]): Island[][] {
+  const groups = new Map<string, Island[]>();
+  for (const island of islands) {
+    const key = island.landmass ?? island.id;
+    const group = groups.get(key);
+    if (group) group.push(island);
+    else groups.set(key, [island]);
+  }
+  return [...groups.values()];
 }
 
 /** Pier, settlement, flag, harbour buoys, docking-area ring and name: "that's a port". */
@@ -607,9 +669,11 @@ function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): 
   ctx.arc(pole.x, pole.y, 1.8, 0, Math.PI * 2);
   ctx.fill();
 
-  if (port.style.lighthouse) {
-    // White tower on the shore to the other side of the pier, with a slow pulsing light.
-    const lh = coastPoint(island, a + 0.16, -8);
+  const lighthouse = port.style.lighthouse;
+  const lighthouseIsland = lighthouse && state.islands.find((i) => i.id === lighthouse.islandId);
+  if (lighthouse && lighthouseIsland) {
+    // White tower on the shore, with a slow pulsing light.
+    const lh = coastPoint(lighthouseIsland, lighthouse.angle, -8);
     const pulse = 0.5 + 0.5 * Math.sin(state.time * 1.6);
     ctx.fillStyle = `rgba(255, 236, 170, ${0.1 + 0.15 * pulse})`;
     ctx.beginPath();

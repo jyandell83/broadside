@@ -48,12 +48,15 @@ export interface Ship {
 }
 
 /**
- * An island: land whose coastline is `radius` scaled by a few sine "harmonics" around the centre
- * (see systems/islands.ts). Star-shaped by construction: every coast point is visible from the centre.
+ * An island, or one blob of a larger landmass: land whose coastline is `radius` scaled by a few
+ * sine "harmonics" around the centre (see systems/islands.ts). Each blob is star-shaped (every
+ * coast point is visible from its centre); overlapping blobs that share a `landmass` form one
+ * piece of land, which can have shapes a single blob can't, such as a cove.
  */
 export interface Island {
   id: string;
   name: string;
+  landmass?: string; // blobs sharing this are drawn and labelled as one piece of land
   center: Vec2;
   radius: number;
   harmonics: readonly (readonly [k: number, amp: number, phase: number])[];
@@ -77,7 +80,7 @@ export interface PortStyle {
   roof: string;
   roofMain: string; // the largest building, by the pier
   flag: string;
-  lighthouse?: boolean; // a lighthouse on the shore beside the harbour
+  lighthouse?: { islandId: string; angle: number }; // a lighthouse on that blob's coast, facing `angle`
 }
 
 /** A port on an island's coast. Geometry is derived from the island + `angle` in systems/ports.ts. */

@@ -9,8 +9,9 @@ import { PX_PER_KNOT } from "./wind";
  * belongs on these entries.
  */
 const PORT_DEFS: { id: string; name: string; islandId: string; angle: number; style: PortStyle }[] = [
-  // The two ports face each other across the open centre (Ashby east, Carrow west), so they're
-  // approached across the usual northerly wind, and when the wind drifts one stays reachable.
+  // The two ports face each other across the open centre (Ashby's harbour east, Wickham's cove
+  // opening west), so they're approached across the usual northerly wind, and when the wind
+  // drifts one stays reachable.
   {
     id: "port-ashby",
     name: "Port Ashby",
@@ -19,11 +20,13 @@ const PORT_DEFS: { id: string; name: string; islandId: string; angle: number; st
     style: { roof: "#a4553a", roofMain: "#8e3f2a", flag: "#e8c35a" }, // terracotta roofs, gold flag
   },
   {
-    id: "port-carrow",
-    name: "Port Carrow",
-    islandId: "carrow",
+    // In the back of Wickham's sheltered cove: sail in through the entrance to reach it.
+    id: "port-wickham",
+    name: "Wickham Bay",
+    islandId: "wickham-back",
     angle: Math.PI,
-    style: { roof: "#5d6f84", roofMain: "#46566a", flag: "#c8433a", lighthouse: true }, // slate roofs, red flag, lighthouse
+    // Slate roofs, red flag, and a lighthouse on the north headland marking the entrance.
+    style: { roof: "#5d6f84", roofMain: "#46566a", flag: "#c8433a", lighthouse: { islandId: "wickham-ntip", angle: 2.3 } },
   },
 ];
 
