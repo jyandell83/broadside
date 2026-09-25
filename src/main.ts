@@ -2,7 +2,7 @@ import "./style.css";
 import { Input } from "./systems/input";
 import { startLoop } from "./systems/loop";
 import { render } from "./systems/render";
-import { steerShip, updateEnemyAI, updateShips } from "./systems/ships";
+import { adjustSails, steerShip, updateEnemyAI, updateShips } from "./systems/ships";
 import { createGameState, getPlayer } from "./systems/state";
 import { fireBroadside, updateProjectiles } from "./systems/weapons";
 import { resolveCollisions } from "./systems/collision";
@@ -36,8 +36,10 @@ function update(dt: number): void {
   const player = getPlayer(state);
   if (player) {
     const turn = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0);
-    const throttle = (input.isDown("KeyW") ? 1 : 0) - (input.isDown("KeyS") ? 1 : 0);
-    steerShip(player, turn, throttle, dt);
+    const setSail = (input.isDown("KeyW") ? 1 : 0) - (input.isDown("KeyS") ? 1 : 0);
+    const trim = (input.isDown("ArrowRight") ? 1 : 0) - (input.isDown("ArrowLeft") ? 1 : 0);
+    steerShip(player, turn, dt);
+    adjustSails(player, setSail, trim, dt);
     if (input.isDown("KeyQ")) fireBroadside(state, player, "port");
     if (input.isDown("KeyE")) fireBroadside(state, player, "starboard");
   }

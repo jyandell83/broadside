@@ -49,6 +49,12 @@ There is no test runner yet.
 - `Input.wasPressed` is true only on the first tick a key goes down; `endFrame()` must stay at the end of `update`.
 - Tuning constants (speeds, reload time, damage) sit at the top of each system file.
 - Coordinates use screen space (y down); `heading` 0 points toward +x, and starboard is `heading + PI/2`.
+- Movement is wind-driven (age of sail), with no throttle. `systems/wind.ts` holds the sailing model:
+  - `state.wind.dir` is the direction the wind blows *toward*.
+  - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × trimEfficiency(trim)`.
+  - Ships within 45° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
+  - Rudder authority scales with speed.
+  - `offWind` and `sailEfficiency` on `Ship` are derived each tick in `updateShips`. Don't set them anywhere else.
 
 ## Working rules
 - Explain major architectural changes before making them.

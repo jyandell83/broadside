@@ -5,13 +5,21 @@ export interface Vec2 {
 
 export type Side = "port" | "starboard";
 
+export interface Wind {
+  dir: number; // radians, the direction the wind blows TOWARD
+  strength: number; // 0..1
+}
+
 export interface Ship {
   id: number;
   team: "player" | "enemy";
   pos: Vec2;
   heading: number; // radians, 0 = facing +x
   speed: number;
-  throttle: number; // -0.25..1
+  sails: number; // 0 (furled) .. 1 (full sail)
+  trim: number; // radians the sails are let out from the centreline, 0..PI/2
+  offWind: number; // derived each tick: 0 = bow into the wind, PI = dead downwind
+  sailEfficiency: number; // derived each tick: 0..1, how well the trim suits the wind
   radius: number;
   hp: number;
   maxHp: number;
@@ -31,6 +39,7 @@ export interface GameState {
   height: number;
   ships: Ship[];
   projectiles: Projectile[];
+  wind: Wind;
   nextId: number;
   time: number;
 }

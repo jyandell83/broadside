@@ -1,21 +1,34 @@
 import type { GameState, Ship } from "../types";
 import { getPlayer } from "./state";
+import { MAX_SPEED } from "./ships";
+import { pointOfSailName, trimAdvice, windFromRelative } from "./wind";
 
 const COLORS = {
   water: "#0b1d2e",
+  streak: "rgba(200, 225, 255, 0.12)",
   player: "#e8d8a8",
   enemy: "#c0504d",
+  sail: "#f4f0e6",
+  sailLuffing: "#9aa3ad",
   shot: "#f2f2f2",
   hud: "#e8e8e8",
+  hudDim: "#8a9aaa",
   hpBack: "#333",
   hpFront: "#6fcf6f",
+  trimGood: "#6fcf6f",
+  trimBad: "#e0a040",
 };
+
+const STREAK_COUNT = 40;
+const STREAK_SPEED = 60; // px/s at wind strength 1
+const STREAK_LENGTH = 24;
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillStyle = COLORS.water;
   ctx.fillRect(0, 0, state.width, state.height);
 
-  for (const ship of state.ships) drawShip(ctx, ship);
+  drawWindStreaks(ctx, state);
+  for (const ship of state.ships) drawShip(ctx, ship, state);
 
   ctx.fillStyle = COLORS.shot;
   for (const p of state.projectiles) {
@@ -25,9 +38,36 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   }
 
   drawHud(ctx, state);
+  drawWindIndicator(ctx, state);
 }
 
-function drawShip(ctx: CanvasRenderingContext2D, ship: Ship): void {
+/** Streaks drifting with the wind so its direction is always visible. Stateless: derived from time. */
+function drawWindStreaks(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const { dir, strength } = state.wind;
+  const dx = Math.cos(dir);
+  const dy = Math.sin(dir);
+  const travel = state.time * STREAK_SPEED * strength;
+  ctx.strokeStyle = COLORS.streak;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < STREAK_COUNT; i++) {
+    // Cheap pseudo-random but stable base positions.
+    const bx = ((i * 7919) % 1000) / 1000;
+    const by = ((i * 104729) % 1000) / 1000;
+    const drift = travel * (0.7 + ((i * 31) % 10) / 20);
+    const x = wrap(bx * state.width + dx * drift, state.width);
+    const y = wrap(by * state.height + dy * drift, state.height);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - dx * STREAK_LENGTH, y - dy * STREAK_LENGTH);
+  }
+  ctx.stroke();
+}
+
+function wrap(v: number, max: number): number {
+  return ((v % max) + max) % max;
+}
+
+function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): void {
   ctx.save();
   ctx.translate(ship.pos.x, ship.pos.y);
   ctx.rotate(ship.heading);
@@ -40,6 +80,22 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship): void {
   ctx.lineTo(8, -8);
   ctx.closePath();
   ctx.fill();
+
+  // Sail swings to the side away from the wind; flaps when it isn't drawing.
+  if (ship.sails > 0.05) {
+    const windFromStarboard = windFromRelative(ship.heading, state.wind) > 0;
+    const luffing = ship.sailEfficiency < 0.3;
+    const flap = luffing ? Math.sin(state.time * 40 + ship.id) * 0.12 : 0;
+    const boom = Math.PI + (windFromStarboard ? ship.trim : -ship.trim) + flap;
+    const len = 8 + 16 * ship.sails;
+    ctx.strokeStyle = luffing ? COLORS.sailLuffing : COLORS.sail;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(4, 0);
+    ctx.lineTo(4 + Math.cos(boom) * len, Math.sin(boom) * len);
+    ctx.stroke();
+  }
   ctx.restore();
 
   // Health bar (unrotated).
@@ -54,13 +110,66 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship): void {
 
 function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   const player = getPlayer(state);
-  ctx.fillStyle = COLORS.hud;
   ctx.font = "14px system-ui, sans-serif";
-  ctx.fillText("W/S throttle · A/D turn · Q fire port · E fire starboard", 12, 22);
-  if (player) {
-    const r = (s: number) => (s > 0 ? s.toFixed(1) + "s" : "ready");
-    ctx.fillText(`Port: ${r(player.reload.port)}   Starboard: ${r(player.reload.starboard)}`, 12, 42);
-  } else {
-    ctx.fillText("Sunk! Press R to restart.", 12, 42);
+  ctx.fillStyle = COLORS.hudDim;
+  ctx.fillText("A/D rudder · W/S raise/furl sails · ←/→ haul in/ease out · Q/E fire port/starboard", 12, 22);
+  ctx.fillStyle = COLORS.hud;
+  if (!player) {
+    ctx.fillText("Sunk! Press R to restart.", 12, 46);
+    return;
   }
+
+  const deg = (r: number) => Math.round((r * 180) / Math.PI);
+  const reload = (s: number) => (s > 0 ? s.toFixed(1) + "s" : "ready");
+  const lines = [
+    `${pointOfSailName(player.offWind)} · ${deg(player.offWind)}° off the wind`,
+    `Sails ${Math.round(player.sails * 100)}% · Trim ${deg(player.trim)}° · Speed ${Math.round((player.speed / MAX_SPEED) * 12)} kn`,
+    `Port: ${reload(player.reload.port)}   Starboard: ${reload(player.reload.starboard)}`,
+  ];
+  lines.forEach((line, i) => ctx.fillText(line, 12, 46 + i * 20));
+
+  // Trim quality bar.
+  const y = 46 + lines.length * 20 - 6;
+  const good = player.sailEfficiency > 0.75;
+  ctx.fillStyle = COLORS.hpBack;
+  ctx.fillRect(12, y, 120, 8);
+  ctx.fillStyle = good ? COLORS.trimGood : COLORS.trimBad;
+  ctx.fillRect(12, y, 120 * player.sailEfficiency, 8);
+  ctx.fillStyle = COLORS.hud;
+  ctx.fillText(trimAdvice(player), 142, y + 8);
+}
+
+function drawWindIndicator(ctx: CanvasRenderingContext2D, state: GameState): void {
+  const r = 26;
+  const cx = state.width - r - 20;
+  const cy = r + 20;
+  ctx.strokeStyle = COLORS.hudDim;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Arrow points the way the wind blows.
+  const dx = Math.cos(state.wind.dir);
+  const dy = Math.sin(state.wind.dir);
+  ctx.strokeStyle = COLORS.hud;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - dx * r * 0.8, cy - dy * r * 0.8);
+  ctx.lineTo(cx + dx * r * 0.8, cy + dy * r * 0.8);
+  ctx.stroke();
+  const hx = cx + dx * r * 0.8;
+  const hy = cy + dy * r * 0.8;
+  ctx.fillStyle = COLORS.hud;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy);
+  ctx.lineTo(hx - dx * 9 - dy * 5, hy - dy * 9 + dx * 5);
+  ctx.lineTo(hx - dx * 9 + dy * 5, hy - dy * 9 - dx * 5);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.font = "12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("WIND", cx, cy + r + 16);
+  ctx.textAlign = "left";
 }
