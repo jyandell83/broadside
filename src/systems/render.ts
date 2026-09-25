@@ -39,9 +39,6 @@ const COLORS = {
   trees: "#3b5a2f",
   islandLabel: "rgba(235, 240, 225, 0.55)",
   pier: "#8b6a44",
-  roof: "#a4553a",
-  roofMain: "#8e3f2a",
-  flag: "#e8c35a",
   port: "#f5d77a",
   sailEdge: "rgba(30, 20, 10, 0.45)",
   shot: "#f2f2f2",
@@ -548,7 +545,7 @@ function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): 
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(ang + (j % 3) * 0.2);
-    ctx.fillStyle = j === 0 ? COLORS.roofMain : COLORS.roof;
+    ctx.fillStyle = j === 0 ? port.style.roofMain : port.style.roof;
     const w = j === 0 ? 16 : 11;
     ctx.fillRect(-w / 2, -5, w, 10);
     ctx.strokeStyle = "rgba(40, 20, 10, 0.5)";
@@ -586,7 +583,7 @@ function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): 
   // Flag on the shore beside the pier.
   const pole = coastPoint(island, a - 0.09, -4);
   const wave = Math.sin(state.time * 5) * 2;
-  ctx.fillStyle = COLORS.flag;
+  ctx.fillStyle = port.style.flag;
   ctx.beginPath();
   ctx.moveTo(pole.x, pole.y);
   ctx.lineTo(pole.x + ux * 12 + sx * wave, pole.y + uy * 12 + sy * wave);
@@ -597,6 +594,27 @@ function drawPort(ctx: CanvasRenderingContext2D, state: GameState, port: Port): 
   ctx.beginPath();
   ctx.arc(pole.x, pole.y, 1.8, 0, Math.PI * 2);
   ctx.fill();
+
+  if (port.style.lighthouse) {
+    // White tower on the shore to the other side of the pier, with a slow pulsing light.
+    const lh = coastPoint(island, a + 0.16, -8);
+    const pulse = 0.5 + 0.5 * Math.sin(state.time * 1.6);
+    ctx.fillStyle = `rgba(255, 236, 170, ${0.1 + 0.15 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(lh.x, lh.y, 14 + 4 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ece8dc";
+    ctx.strokeStyle = "rgba(40, 25, 12, 0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(lh.x, lh.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#c8433a";
+    ctx.beginPath();
+    ctx.arc(lh.x, lh.y, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // Docking area: a slowly turning dashed ring, brighter when the player is inside it.
   const player = getPlayer(state);

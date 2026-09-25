@@ -66,7 +66,10 @@ There is no test runner yet.
     - Rendering (`islandPath`), land collision (`pushOutOfLand`, `isOnLand`) and port placement all use `coastRadius`, so they always agree.
     - Ships are pushed out radially. `updateShips` then drains speed and swings the bow along the shore in proportion to how squarely it hit, so ships slide off the coast rather than sticking.
     - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
-  - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that. Future per-port data (prices, services) goes on the def.
+  - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that.
+    - Each port has a `style` (roof and flag colours, optional lighthouse) for its visual identity.
+    - Future per-port data (prices, services) goes on the def.
+    - Everything else (docking, prompts, the panel, off-screen markers) is shared, so a new port is one entry here plus its island.
     - Docking needs furled sails and a near-stop, using the existing sail and speed values (no separate docking state). `dockablePort` means "inside the docking area"; `dockStatus` adds readiness: `"sails"` (sails still set), `"slowing"` (furled, faster than `DOCK_MAX_SPEED`, 3 kn), or `"ready"`. The prompt and the F key read `dockStatus`.
     - F docks when ready and sets sail when docked.
     - `ship.docked` disables steering, sails and firing, and eases the ship into its berth.
@@ -88,8 +91,10 @@ There is no test runner yet.
   - Arcade tuning: a ship never drops below `MIN_SPEED` (even in irons).
   - Steering is `max(rudder, pivot)`. Rudder authority grows with speed; the pivot boost gives full turn rate when nearly stopped, so a bad heading is always recoverable.
   - The wind shifts every 20–45s toward a new random direction and strength, and eases toward it over about 15s (`updateWind`).
-  - There is a prevailing wind (`wind.prevailing`, from the north). Shifts stay within `MAX_SHIFT` (40°) of it and change by at most 40° at a time.
-  - Map layout assumes the prevailing wind. For example, Port Ashby sits due west of the spawn point with its harbour facing east, so it's reached and left on a beam reach rather than a beat. Check new ports and islands against the prevailing wind.
+  - The wind changes in two layers, both eased:
+    - The prevailing wind (`wind.prevailing`) drifts slowly. Every 2.5–5 minutes it swings up to 50°, pulled partly back toward the long-run `wind.climate` (from the north).
+    - The 20–45s shifts land within 35° of the current prevailing wind and change by at most 40° at a time.
+  - Map layout: Port Ashby (west, harbour facing east) and Port Carrow (east, harbour facing west) face each other across the open centre. With the usual northerly both are a beam reach from the centre, and however the prevailing wind drifts, at least one is reachable without beating. Check new ports and islands against the wind.
   - Ships and wind share one speed scale (`PX_PER_KNOT` in `wind.ts`). Use it for any speed shown to the player.
   - `wind.drift` is added up each tick and moves the on-water streaks. Don't derive streak positions from `time × wind`, because every shift then makes them jump.
   - `offWind` and `sailEfficiency` on `Ship` are derived each tick in `updateShips`. Don't set them anywhere else.

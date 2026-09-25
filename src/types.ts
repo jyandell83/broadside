@@ -9,7 +9,10 @@ export type Side = "port" | "starboard";
 
 export interface Wind {
   dir: number; // radians, the direction the wind blows TOWARD
-  prevailing: number; // radians: shifts wander around this, never further than MAX_SHIFT from it
+  climate: number; // radians: the long-run average; the prevailing wind is pulled back toward it
+  prevailing: number; // radians: the current prevailing wind, drifting slowly; shifts wander around it
+  prevailingTarget: number; // the prevailing wind eases toward this
+  nextPrevailingShift: number; // seconds until the prevailing wind picks a new target
   strength: number; // 0..1
   targetDir: number; // the wind eases toward these between shifts
   targetStrength: number;
@@ -56,12 +59,21 @@ export interface Island {
   harmonics: readonly (readonly [k: number, amp: number, phase: number])[];
 }
 
+/** How a port looks, so each has its own identity. */
+export interface PortStyle {
+  roof: string;
+  roofMain: string; // the largest building, by the pier
+  flag: string;
+  lighthouse?: boolean; // a lighthouse on the shore beside the harbour
+}
+
 /** A port on an island's coast. Geometry is derived from the island + `angle` in systems/ports.ts. */
 export interface Port {
   id: string;
   name: string;
   islandId: string;
   angle: number; // direction from the island centre the harbour faces (radians)
+  style: PortStyle;
   pierBase: Vec2; // where the pier meets the shore
   pierEnd: Vec2;
   berth: Vec2; // where a docked ship lies, alongside the pier

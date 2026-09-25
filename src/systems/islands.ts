@@ -11,15 +11,29 @@ export const ISLANDS: Island[] = [
   {
     id: "ashby",
     name: "Ashby Isle",
-    // Due west of the spawn point, so with the prevailing northerly the run to and from
-    // Port Ashby (harbour facing east) is a beam reach both ways. ~750px of sea room to
-    // the west and ~1,600px north and south, so there's space to tack around it.
+    // West of the open centre, harbour facing east. With the usual northerly the run to and from
+    // Port Ashby is a beam reach. ~750px of sea room to the west, ~1,600px north and south.
     center: { x: 1050, y: 1875 },
     radius: 230,
     harmonics: [
       [2, 0.1, 0.6],
       [3, 0.12, 2.1],
       [5, 0.05, 0.4],
+    ],
+  },
+  {
+    id: "carrow",
+    name: "Carrow Isle",
+    // East of the open centre, opposite Ashby, harbour facing west: ~2,400px dock to dock.
+    // Between the two ports, whichever way the prevailing wind has drifted, at least one
+    // can be reached from the centre without beating upwind. Leaves ~580px of channel to
+    // Long Cay, ~735px to Gull Rock and ~600px to the world edge.
+    center: { x: 4150, y: 1750 },
+    radius: 210,
+    harmonics: [
+      [2, 0.12, 2.4],
+      [3, 0.1, 0.8],
+      [5, 0.05, 1.7],
     ],
   },
   {

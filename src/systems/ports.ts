@@ -1,4 +1,4 @@
-import type { GameState, Island, Port, Ship } from "../types";
+import type { GameState, Island, Port, PortStyle, Ship } from "../types";
 import { coastPoint } from "./islands";
 import { PX_PER_KNOT } from "./wind";
 
@@ -7,10 +7,23 @@ import { PX_PER_KNOT } from "./wind";
  * docking area are derived from that. Future per-port data (prices, services, contracts)
  * belongs on these entries.
  */
-const PORT_DEFS: { id: string; name: string; islandId: string; angle: number }[] = [
-  // Harbour faces east, toward open water, across the prevailing northerly wind: approached
-  // and left on a reach rather than a beat.
-  { id: "port-ashby", name: "Port Ashby", islandId: "ashby", angle: 0 },
+const PORT_DEFS: { id: string; name: string; islandId: string; angle: number; style: PortStyle }[] = [
+  // The two ports face each other across the open centre (Ashby east, Carrow west), so they're
+  // approached across the usual northerly wind, and when the wind drifts one stays reachable.
+  {
+    id: "port-ashby",
+    name: "Port Ashby",
+    islandId: "ashby",
+    angle: 0,
+    style: { roof: "#a4553a", roofMain: "#8e3f2a", flag: "#e8c35a" }, // terracotta roofs, gold flag
+  },
+  {
+    id: "port-carrow",
+    name: "Port Carrow",
+    islandId: "carrow",
+    angle: Math.PI,
+    style: { roof: "#5d6f84", roofMain: "#46566a", flag: "#c8433a", lighthouse: true }, // slate roofs, red flag, lighthouse
+  },
 ];
 
 const PIER_LENGTH = 55; // px out from the shore

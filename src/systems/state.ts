@@ -29,8 +29,8 @@ export function createGameState(viewportWidth: number, viewportHeight: number): 
     loot: [],
     lootPickups: [],
     shake: 0,
-    // Prevailing wind from the north (blowing toward the bottom of the world). Port placement
-    // assumes this: see islands.ts.
+    // Climate: wind from the north (blowing toward the bottom of the world) on average. The
+    // prevailing wind drifts around it; ports sit west and east so one is always reachable.
     wind: createWind(Math.PI / 2),
     nextId: 1,
     time: 0,

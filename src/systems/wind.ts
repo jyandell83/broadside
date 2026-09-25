@@ -29,10 +29,21 @@ export const PX_PER_KNOT = 5;
 /** Wind speed at strength 1. Ships top out around half the wind speed. */
 export const WIND_MAX_KNOTS = 20;
 
-// Wind shifts: every so often pick a new target, then ease toward it.
+// Two layers of wind change, both eased so nothing is sudden:
+// 1. The prevailing wind drifts slowly: every few minutes it picks a new direction up to
+//    PREVAILING_STEP away (pulled partly back toward the climate) and eases there over ~a minute.
+//    So there are long stretches of one prevailing wind, and occasionally a shift big enough to
+//    change the best route, without it circling the compass.
+// 2. Every 20–45s the wind shifts to within LOCAL_SPREAD of the current prevailing wind.
+const PREVAILING_INTERVAL_MIN = 150; // seconds
+const PREVAILING_INTERVAL_MAX = 300;
+const PREVAILING_STEP = 50 * DEG; // largest single swing of the prevailing wind
+const PREVAILING_PULL = 0.3; // fraction of the way back toward the climate added to each swing
+const PREVAILING_EASE = 0.02; // per second; a swing mostly settles over ~1–2 minutes
 const SHIFT_INTERVAL_MIN = 20; // seconds
 const SHIFT_INTERVAL_MAX = 45;
-const MAX_SHIFT = 40 * DEG; // largest single change of direction, and the furthest from the prevailing wind
+const LOCAL_SPREAD = 35 * DEG; // short-term shifts land within this of the prevailing wind
+const MAX_SHIFT = 40 * DEG; // largest single short-term change of direction
 const STRENGTH_MIN = 0.5;
 const STRENGTH_MAX = 1;
 const SHIFT_EASE = 0.15; // per second; ~15s for a shift to mostly settle
@@ -41,13 +52,16 @@ function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-/** `prevailing` is where the wind blows toward on average; the map's layout assumes it. */
-export function createWind(prevailing: number): Wind {
+/** `climate` is where the wind blows toward in the long run; the game starts with it prevailing. */
+export function createWind(climate: number): Wind {
   return {
-    dir: prevailing,
-    prevailing,
+    dir: climate,
+    climate,
+    prevailing: climate,
+    prevailingTarget: climate,
+    nextPrevailingShift: rand(PREVAILING_INTERVAL_MIN, PREVAILING_INTERVAL_MAX),
     strength: 0.8,
-    targetDir: prevailing,
+    targetDir: climate,
     targetStrength: 0.8,
     nextShift: rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX),
     drift: { x: 0, y: 0 },
@@ -55,10 +69,19 @@ export function createWind(prevailing: number): Wind {
 }
 
 export function updateWind(wind: Wind, dt: number): void {
+  wind.nextPrevailingShift -= dt;
+  if (wind.nextPrevailingShift <= 0) {
+    const pull = angleDiff(wind.climate, wind.prevailing) * PREVAILING_PULL;
+    const step = Math.max(-PREVAILING_STEP, Math.min(PREVAILING_STEP, rand(-PREVAILING_STEP, PREVAILING_STEP) + pull));
+    wind.prevailingTarget = wind.prevailing + step;
+    wind.nextPrevailingShift = rand(PREVAILING_INTERVAL_MIN, PREVAILING_INTERVAL_MAX);
+  }
+  wind.prevailing += angleDiff(wind.prevailingTarget, wind.prevailing) * PREVAILING_EASE * dt;
+
   wind.nextShift -= dt;
   if (wind.nextShift <= 0) {
-    // New direction within MAX_SHIFT of the prevailing wind, and no more than MAX_SHIFT from now.
-    const candidate = wind.prevailing + rand(-MAX_SHIFT, MAX_SHIFT);
+    // New direction near the current prevailing wind, and no more than MAX_SHIFT from now.
+    const candidate = wind.prevailing + rand(-LOCAL_SPREAD, LOCAL_SPREAD);
     const change = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT, angleDiff(candidate, wind.dir)));
     wind.targetDir = wind.dir + change;
     wind.targetStrength = rand(STRENGTH_MIN, STRENGTH_MAX);
