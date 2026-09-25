@@ -15,6 +15,8 @@ export function createGameState(viewportWidth: number, viewportHeight: number): 
     projectiles: [],
     splashes: [],
     wake: [],
+    particles: [],
+    shake: 0,
     wind: createWind(Math.PI / 2), // blowing from the north (top of the world)
     nextId: 1,
     time: 0,

@@ -1,7 +1,8 @@
-import type { GameState, Ship } from "../types";
+import type { GameState, Particle, Ship } from "../types";
 import { getPlayer } from "./state";
 import { SPLASH_DURATION } from "./weapons";
 import { worldToScreen } from "./camera";
+import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
 import { MAX_SPEED } from "./ships";
 import { PX_PER_KNOT, braceAdvice, pointOfSailName, sailFill, windKnots } from "./wind";
 
@@ -20,6 +21,9 @@ const COLORS = {
   sailLuffing: "#9aa3ad",
   sailAback: "#d9a58f",
   yard: "#3b2715",
+  wood: "#c9a26b",
+  wreckage: "#6b4a2b",
+  scorch: "#1a120c",
   sailEdge: "rgba(30, 20, 10, 0.45)",
   shot: "#f2f2f2",
   hud: "#e8e8e8",
@@ -40,7 +44,8 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
 
   // World space: everything positioned in world px, shifted so the camera is centred.
   ctx.save();
-  ctx.translate(viewport.width / 2 - camera.x, viewport.height / 2 - camera.y);
+  const shake = shakeOffset(state);
+  ctx.translate(viewport.width / 2 - camera.x + shake.x, viewport.height / 2 - camera.y + shake.y);
 
   ctx.fillStyle = COLORS.water;
   ctx.fillRect(0, 0, world.width, world.height);
@@ -50,6 +55,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.strokeRect(0, 0, world.width, world.height);
 
   drawWake(ctx, state);
+  drawParticles(ctx, state, "water");
   drawWindStreaks(ctx, state);
   for (const ship of state.ships) drawShip(ctx, ship, state);
 
@@ -63,6 +69,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.arc(p.pos.x, p.pos.y, 1.8 + 1.4 * Math.sin(Math.PI * t), 0, Math.PI * 2);
     ctx.fill();
   }
+  drawParticles(ctx, state, "air");
   ctx.restore();
 
   // Screen space.
@@ -188,12 +195,7 @@ function wrap(v: number, max: number): number {
   return ((v % max) + max) % max;
 }
 
-function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): void {
-  ctx.save();
-  ctx.translate(ship.pos.x, ship.pos.y);
-  ctx.rotate(ship.heading);
-  drawBowWave(ctx, ship);
-  ctx.fillStyle = ship.team === "player" ? COLORS.player : COLORS.enemy;
+function hullPath(ctx: CanvasRenderingContext2D): void {
   ctx.beginPath();
   ctx.moveTo(22, 0);
   ctx.lineTo(8, 8);
@@ -201,11 +203,50 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.lineTo(-18, -7);
   ctx.lineTo(8, -8);
   ctx.closePath();
-  ctx.fill();
+}
 
+function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): void {
+  const damage = 1 - Math.max(0, ship.hp) / ship.maxHp;
+  const sinkT = ship.sinkAge === null ? 0 : Math.min(1, ship.sinkAge / SINK_DURATION);
+  const list = Math.min(1, sinkT * 2.5); // heels over quickly, then settles lower
+  const fade = sinkT < 0.7 ? 1 : 1 - (sinkT - 0.7) / 0.3; // gone once mostly submerged
+
+  ctx.save();
+  ctx.globalAlpha = fade;
+  ctx.translate(ship.pos.x + ship.jolt.x, ship.pos.y + ship.jolt.y);
+  ctx.rotate(ship.heading + ship.joltSpin);
+  drawBowWave(ctx, ship);
+
+  // Listing, seen from above: the deck foreshortens across the beam as she heels,
+  // and everything shrinks slightly as she settles lower.
+  const settle = 1 - 0.12 * sinkT;
+  ctx.scale(settle, settle * (1 - 0.35 * list));
+
+  ctx.fillStyle = ship.team === "player" ? COLORS.player : COLORS.enemy;
+  hullPath(ctx);
+  ctx.fill();
+  // Scorching as the ship takes damage.
+  if (damage > 0.3) {
+    ctx.globalAlpha = fade * 0.4 * ((damage - 0.3) / 0.7);
+    ctx.fillStyle = COLORS.scorch;
+    ctx.fill();
+  }
+  // Water closing over the hull as she goes down.
+  if (sinkT > 0) {
+    ctx.globalAlpha = fade * 0.8 * sinkT;
+    ctx.fillStyle = COLORS.water;
+    ctx.fill();
+  }
+  ctx.globalAlpha = fade;
+
+  if (damage > 0.55 || sinkT > 0) drawFires(ctx, ship, state, sinkT);
+
+  // Masts lean over to the side she's heeling toward.
+  ctx.translate(0, ship.listSide * list * 5);
   drawSails(ctx, ship, state);
   ctx.restore();
 
+  if (ship.sinkAge !== null) return;
   // Health bar (unrotated).
   const w = 36;
   const x = ship.pos.x - w / 2;
@@ -214,6 +255,90 @@ function drawShip(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState): 
   ctx.fillRect(x, y, w, 4);
   ctx.fillStyle = COLORS.hpFront;
   ctx.fillRect(x, y, w * Math.max(0, ship.hp / ship.maxHp), 4);
+}
+
+/** Small flickering fires on deck at the ship's damage spots. Ship-local coords. */
+function drawFires(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState, sinkT: number): void {
+  const outer = ctx.globalAlpha;
+  const base = outer * (1 - sinkT * 0.8); // the sea puts them out as she sinks
+  fireSpots(ship).forEach(([lx, ly], i) => {
+    const flicker = 0.75 + 0.25 * Math.sin(state.time * 19 + i * 2.1 + ship.id);
+    ctx.globalAlpha = base * 0.75;
+    ctx.fillStyle = "#e0662a";
+    ctx.beginPath();
+    ctx.arc(lx, ly, 2.6 * flicker, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = base;
+    ctx.fillStyle = "#ffd27a";
+    ctx.beginPath();
+    ctx.arc(lx, ly, 1.2 * flicker, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = outer;
+}
+
+const WATER_LAYER = new Set<Particle["kind"]>(["bubble", "wreckage"]);
+
+/** Impact and damage effects. "water" = things on the surface (under ships); "air" = above them. */
+function drawParticles(ctx: CanvasRenderingContext2D, state: GameState, layer: "water" | "air"): void {
+  for (const p of state.particles) {
+    if (WATER_LAYER.has(p.kind) !== (layer === "water")) continue;
+    const t = p.age / p.life;
+    switch (p.kind) {
+      case "flash": {
+        const r = p.size * (0.6 + 0.4 * t);
+        ctx.fillStyle = `rgba(255, 190, 110, ${0.55 * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255, 248, 225, ${1 - t})`;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, r * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case "splinter": {
+        const dx = Math.cos(p.rot) * p.size * 0.5;
+        const dy = Math.sin(p.rot) * p.size * 0.5;
+        ctx.strokeStyle = COLORS.wood;
+        ctx.globalAlpha = 1 - t * t;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(p.pos.x - dx, p.pos.y - dy);
+        ctx.lineTo(p.pos.x + dx, p.pos.y + dy);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case "smoke":
+        ctx.fillStyle = `rgba(150, 150, 155, ${0.3 * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, p.size * (1 + 2 * t), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case "ember":
+        ctx.fillStyle = `rgba(255, 170, 70, ${1 - t})`;
+        ctx.fillRect(p.pos.x - 0.75, p.pos.y - 0.75, 1.5, 1.5);
+        break;
+      case "bubble":
+        ctx.strokeStyle = `rgba(200, 230, 255, ${0.5 * (1 - t)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(p.pos.x, p.pos.y, p.size * (1 + t), 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      case "wreckage": {
+        ctx.save();
+        ctx.translate(p.pos.x, p.pos.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = t < 0.7 ? 0.9 : 0.9 * (1 - (t - 0.7) / 0.3);
+        ctx.fillStyle = COLORS.wreckage;
+        ctx.fillRect(-p.size / 2, -1, p.size, 2);
+        ctx.restore();
+        break;
+      }
+    }
+  }
 }
 
 /** Foam curling off the bow; longer and brighter the faster the ship goes. Ship-local coords. */
@@ -253,10 +378,11 @@ function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState):
 
   const fill = sailFill(ship, state.wind);
   const aback = fill < 0;
-  const luffing = !aback && ship.sailEfficiency < 0.3;
+  const luffing = ship.sinkAge !== null || (!aback && ship.sailEfficiency < 0.3);
   const flap = luffing ? Math.sin(state.time * 30 + ship.id) * 0.5 : 0;
   // Belly depth: deep when drawing well, flat when edge-on or mis-braced, reversed when aback.
   // Sail amount changes the depth only partly, so the bulge stays readable at reduced sail.
+  const baseAlpha = ctx.globalAlpha;
   const belly = (0.5 + 0.5 * ship.sails) * 8 * (aback ? fill * 0.6 : fill * (0.25 + 0.75 * ship.sailEfficiency) + flap);
 
   for (const [mx, half] of MASTS) {
@@ -267,13 +393,13 @@ function drawSails(ctx: CanvasRenderingContext2D, ship: Ship, state: GameState):
 
     if (ship.sails > 0.05) {
       ctx.fillStyle = aback ? COLORS.sailAback : luffing ? COLORS.sailLuffing : COLORS.sail;
-      ctx.globalAlpha = 0.5 + 0.5 * ship.sails;
+      ctx.globalAlpha = baseAlpha * (0.5 + 0.5 * ship.sails);
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.quadraticCurveTo(mx + nx * belly * 2, ny * belly * 2, x2, y2);
       ctx.closePath();
       ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = baseAlpha;
       ctx.strokeStyle = COLORS.sailEdge;
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -298,7 +424,7 @@ function drawOffscreenIndicators(ctx: CanvasRenderingContext2D, state: GameState
   const cx = width / 2;
   const cy = height / 2;
   for (const ship of state.ships) {
-    if (ship.team !== "enemy") continue;
+    if (ship.team !== "enemy" || ship.sinkAge !== null) continue;
     const p = worldToScreen(state, ship.pos);
     const r = ship.radius;
     if (p.x > -r && p.x < width + r && p.y > -r && p.y < height + r) continue;
@@ -333,8 +459,8 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillStyle = COLORS.hudDim;
   ctx.fillText("A/D rudder · W/S raise/furl sails · ←/→ brace yards · Q/E fire port/starboard", 12, 22);
   ctx.fillStyle = COLORS.hud;
-  if (!player) {
-    ctx.fillText("Sunk! Press R to restart.", 12, 46);
+  if (!player || player.sinkAge !== null) {
+    ctx.fillText(player ? "She's going down!" : "Sunk! Press R to restart.", 12, 46);
     return;
   }
 

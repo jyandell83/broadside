@@ -1,6 +1,7 @@
 import type { GameState, Ship, Vec2 } from "../types";
 import { SHOT_RANGE } from "./weapons";
-import { BRACE_LIMIT, NO_GO, braceEfficiency, idealBrace, offWindAngle, polarFactor } from "./wind";
+import { SINK_DURATION } from "./effects";
+import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor } from "./wind";
 
 export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of sail
 const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
@@ -32,11 +33,18 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     maxHp: 100,
     reload: { port: 0, starboard: 0 },
     wakeDistance: 0,
+    jolt: { x: 0, y: 0 },
+    joltSpin: 0,
+    sinkAge: null,
+    listSide: 1,
+    sinkSpin: 0,
+    smokeTimer: 0,
   };
 }
 
 /** turn: -1 (to port) .. 1 (to starboard). */
 export function steerShip(ship: Ship, turn: number, dt: number): void {
+  if (ship.sinkAge !== null) return;
   const r = Math.min(1, ship.speed / MAX_SPEED);
   const rudder = MIN_STEERAGE + (1 - MIN_STEERAGE) * r;
   const fade = (PIVOT_GONE_ABOVE - r) / (PIVOT_GONE_ABOVE - PIVOT_FULL_BELOW);
@@ -47,6 +55,7 @@ export function steerShip(ship: Ship, turn: number, dt: number): void {
 
 /** setDelta: +1 to raise sail, -1 to furl. braceDelta: +1 swings the yards toward starboard, -1 toward port. */
 export function adjustSails(ship: Ship, setDelta: number, braceDelta: number, dt: number): void {
+  if (ship.sinkAge !== null) return;
   ship.sails = Math.min(1, Math.max(0, ship.sails + setDelta * SAIL_RATE * dt));
   ship.brace = Math.min(BRACE_LIMIT, Math.max(-BRACE_LIMIT, ship.brace + braceDelta * BRACE_RATE * dt));
 }
@@ -56,8 +65,31 @@ export function autoBrace(state: GameState, ship: Ship): void {
   ship.brace = idealBrace(ship.heading, state.wind);
 }
 
+/** A ship at 0 HP is disabled and starts going down; it's removed after SINK_DURATION. */
+export function startSinking(ship: Ship): void {
+  if (ship.sinkAge !== null) return;
+  ship.sinkAge = 0;
+  ship.listSide = Math.random() < 0.5 ? -1 : 1;
+  ship.sinkSpin = (Math.random() < 0.5 ? -1 : 1) * (0.15 + Math.random() * 0.2);
+}
+
+const SINK_DRAG = 0.8; // how quickly a wreck loses way
+const WRECK_DRIFT = 0.04; // fraction of wind speed a wreck is pushed downwind
+
 export function updateShips(state: GameState, dt: number): void {
   for (const ship of state.ships) {
+    if (ship.sinkAge !== null) {
+      // Disabled: coast to a stop, slowly turn, and drift a little with the wind.
+      ship.sinkAge += dt;
+      ship.speed *= Math.exp(-SINK_DRAG * dt);
+      ship.heading += ship.sinkSpin * dt;
+      ship.sinkSpin *= Math.exp(-0.3 * dt);
+      const drift = state.wind.strength * WIND_MAX_KNOTS * PX_PER_KNOT * WRECK_DRIFT;
+      ship.pos.x += (Math.cos(ship.heading) * ship.speed + Math.cos(state.wind.dir) * drift) * dt;
+      ship.pos.y += (Math.sin(ship.heading) * ship.speed + Math.sin(state.wind.dir) * drift) * dt;
+      continue;
+    }
+
     ship.offWind = offWindAngle(ship.heading, state.wind);
     ship.sailEfficiency = braceEfficiency(ship, state.wind);
 
@@ -76,14 +108,14 @@ export function updateShips(state: GameState, dt: number): void {
     ship.reload.port = Math.max(0, ship.reload.port - dt);
     ship.reload.starboard = Math.max(0, ship.reload.starboard - dt);
   }
-  state.ships = state.ships.filter((s) => s.hp > 0);
+  state.ships = state.ships.filter((s) => s.sinkAge === null || s.sinkAge < SINK_DURATION);
 }
 
 /** Placeholder enemy behaviour: sail in circles and fire when the player is abeam. */
 export function updateEnemyAI(state: GameState, dt: number, fire: (ship: Ship, side: "port" | "starboard") => void): void {
-  const player = state.ships.find((s) => s.team === "player");
+  const player = state.ships.find((s) => s.team === "player" && s.sinkAge === null);
   for (const ship of state.ships) {
-    if (ship.team !== "enemy") continue;
+    if (ship.team !== "enemy" || ship.sinkAge !== null) continue;
     ship.sails = 1;
     steerShip(ship, 0.4, dt);
     autoBrace(state, ship);

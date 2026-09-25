@@ -1,4 +1,6 @@
 import type { GameState, Vec2 } from "../types";
+import { cannonImpact } from "./effects";
+import { startSinking } from "./ships";
 
 export function circlesOverlap(a: Vec2, ar: number, b: Vec2, br: number): boolean {
   const dx = a.x - b.x;
@@ -9,13 +11,16 @@ export function circlesOverlap(a: Vec2, ar: number, b: Vec2, br: number): boolea
 
 const PROJECTILE_RADIUS = 2;
 
-/** Applies cannonball hits to ships and removes the balls that hit. */
+/** Applies cannonball hits to ships and removes the balls that hit. Sinking wrecks can't be hit. */
 export function resolveCollisions(state: GameState): void {
   state.projectiles = state.projectiles.filter((p) => {
     for (const ship of state.ships) {
-      if (ship.id === p.owner) continue;
+      if (ship.id === p.owner || ship.sinkAge !== null) continue;
       if (circlesOverlap(p.pos, PROJECTILE_RADIUS, ship.pos, ship.radius)) {
         ship.hp -= p.damage;
+        const fatal = ship.hp <= 0;
+        cannonImpact(state, ship, p.pos, p.vel, fatal);
+        if (fatal) startSinking(ship);
         return false;
       }
     }

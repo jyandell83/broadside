@@ -9,6 +9,7 @@ import { updateWind } from "./systems/wind";
 import { resolveCollisions } from "./systems/collision";
 import { updateCamera } from "./systems/camera";
 import { updateWake } from "./systems/wake";
+import { updateEffects } from "./systems/effects";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const ctx = canvas?.getContext("2d");
@@ -55,6 +56,7 @@ function update(dt: number): void {
   updateSplashes(state, dt);
   resolveCollisions(state);
   updateWake(state, dt);
+  updateEffects(state, dt);
   updateCamera(state, dt);
 
   input.endFrame();

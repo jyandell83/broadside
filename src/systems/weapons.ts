@@ -12,7 +12,7 @@ const SPREAD = 0.08; // radians of random scatter
 export const SPLASH_DURATION = 0.7; // seconds
 
 export function fireBroadside(state: GameState, ship: Ship, side: Side): void {
-  if (ship.reload[side] > 0) return;
+  if (ship.reload[side] > 0 || ship.sinkAge !== null) return;
   ship.reload[side] = RELOAD_TIME;
 
   // Starboard is to the right of the heading (+PI/2 in screen space, y down).

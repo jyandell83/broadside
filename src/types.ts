@@ -29,6 +29,13 @@ export interface Ship {
   maxHp: number;
   reload: Record<Side, number>; // seconds until each side can fire again
   wakeDistance: number; // px sailed since the last wake puff
+  // Visual-only hit reaction: offset and twist added when drawing, decaying to zero.
+  jolt: Vec2;
+  joltSpin: number;
+  sinkAge: number | null; // null while afloat; seconds since reaching 0 HP while sinking
+  listSide: number; // -1 or 1: which way the ship heels as it sinks
+  sinkSpin: number; // rad/s the wreck slowly turns while sinking
+  smokeTimer: number; // seconds until the next damage smoke puff
 }
 
 export interface Projectile {
@@ -55,6 +62,21 @@ export interface WakeParticle {
   size: number; // px radius at birth
 }
 
+export type ParticleKind = "flash" | "splinter" | "smoke" | "ember" | "bubble" | "wreckage";
+
+/** A short-lived visual effect (impacts, damage, sinking). Never affects gameplay. */
+export interface Particle {
+  kind: ParticleKind;
+  pos: Vec2;
+  vel: Vec2;
+  drag: number; // per second; velocity decays by exp(-drag * dt)
+  age: number;
+  life: number;
+  size: number;
+  rot: number;
+  spin: number; // rad/s
+}
+
 export interface Size {
   width: number;
   height: number;
@@ -69,6 +91,8 @@ export interface GameState {
   projectiles: Projectile[];
   splashes: Splash[];
   wake: WakeParticle[];
+  particles: Particle[];
+  shake: number; // camera shake "trauma", 0..1; decays over time
   wind: Wind;
   nextId: number;
   time: number;
