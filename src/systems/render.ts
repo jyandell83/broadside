@@ -1,6 +1,6 @@
 import type { GameState, Island, Particle, Port, Ship, Vec2 } from "../types";
 import { getPlayer } from "./state";
-import { SPLASH_DURATION } from "./weapons";
+import { LOW_CANNONBALLS, SPLASH_DURATION } from "./weapons";
 import { worldToScreen } from "./camera";
 import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
 import { SHIP_SCALE } from "./hull";
@@ -48,6 +48,8 @@ const COLORS = {
   hpBack: "#333",
   hpFront: "#6fcf6f",
   braceGood: "#6fcf6f",
+  ammoLow: "#e0a040",
+  ammoOut: "#e05a4a",
   braceBad: "#e0a040",
 };
 
@@ -1073,6 +1075,13 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
     `Port: ${reload(player.reload.port)}   Starboard: ${reload(player.reload.starboard)}`,
   ];
   lines.forEach((line, i) => ctx.fillText(line, 12, 46 + i * 20));
+
+  // Ammunition, after the reload readout: amber when low, red when out.
+  const balls = player.supplies.cannonballs ?? 0;
+  const reloadWidth = ctx.measureText(lines[2]!).width;
+  ctx.fillStyle = balls === 0 ? COLORS.ammoOut : balls < LOW_CANNONBALLS ? COLORS.ammoLow : COLORS.hudDim;
+  ctx.fillText(balls === 0 ? "·  Out of shot" : `·  Cannonballs ${balls}`, 12 + reloadWidth + 14, 46 + 2 * 20);
+  ctx.fillStyle = COLORS.hud;
 
   // Brace quality bar.
   const y = 46 + lines.length * 20 - 6;

@@ -13,15 +13,28 @@ const SHOT_DAMAGE = 10;
 const SPREAD = 0.08; // radians of random scatter
 export const SPLASH_DURATION = 0.7; // seconds
 
+export const STARTING_CANNONBALLS = 100; // every ship puts to sea with this many
+export const LOW_CANNONBALLS = GUNS_PER_SIDE * 5; // HUD warns below five full broadsides
 const GUN_SPACING = 10; // base units between guns along the hull
 const RIPPLE_DELAY = 0.07; // seconds between guns in a broadside, fired bow to stern
 const RIPPLE_JITTER = 0.015; // ± seconds, so the rhythm isn't mechanical
 
-/** Starts a broadside: reload begins now, and the guns fire in quick succession (see updateGuns). */
+/** Cannonballs aboard that aren't already set aside for guns waiting to fire. */
+export function cannonballsFree(ship: Ship): number {
+  return (ship.supplies.cannonballs ?? 0) - ship.pendingShots.length;
+}
+
+/**
+ * Starts a broadside: reload begins now, and the guns fire in quick succession (see updateGuns).
+ * Only as many guns fire as there are cannonballs to load them, bow first; with none, nothing
+ * fires and the reload doesn't start.
+ */
 export function fireBroadside(ship: Ship, side: Side): void {
   if (ship.reload[side] > 0 || ship.sinkAge !== null || ship.docked) return;
+  const guns = Math.min(GUNS_PER_SIDE, cannonballsFree(ship));
+  if (guns <= 0) return;
   ship.reload[side] = RELOAD_TIME;
-  for (let i = 0; i < GUNS_PER_SIDE; i++) {
+  for (let i = 0; i < guns; i++) {
     const delay = i === 0 ? 0 : i * RIPPLE_DELAY + (Math.random() - 0.5) * 2 * RIPPLE_JITTER;
     ship.pendingShots.push({ side, gun: i, delay });
   }
@@ -44,6 +57,9 @@ export function updateGuns(state: GameState, dt: number): void {
 
 /** One gun: the ball leaves from its port on the hull side, using the ship's current position. */
 function fireGun(state: GameState, ship: Ship, side: Side, gun: number): void {
+  const balls = ship.supplies.cannonballs ?? 0;
+  if (balls <= 0) return; // fireBroadside only queues loaded guns; this is a safety net
+  ship.supplies.cannonballs = balls - 1;
   // Starboard is to the right of the heading (+PI/2 in screen space, y down).
   const sideSign = side === "starboard" ? 1 : -1;
   const dir = ship.heading + sideSign * (Math.PI / 2);

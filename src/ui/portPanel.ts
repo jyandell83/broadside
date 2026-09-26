@@ -16,11 +16,12 @@ import {
 } from "../systems/trade";
 
 const FEEDBACK_MS = 2500;
+const BULK_BUY = 10; // the "Buy 10" button
 
 /**
  * The Port screen, as a DOM panel over the canvas: menus with real buttons are much simpler in
  * HTML than drawn by hand. It shows while the player is moored and lets them sell cargo and buy
- * repair supplies. Prices and rules live in systems/trade.ts; this only displays them and calls
+ * ship supplies. Prices and rules live in systems/trade.ts; this only displays them and calls
  * the trade functions. It keeps no game state of its own.
  */
 export function createPortPanel(onSetSail: () => void): { sync: (state: GameState) => void } {
@@ -50,9 +51,10 @@ export function createPortPanel(onSetSail: () => void): { sync: (state: GameStat
   holdHeading.textContent = "Cargo Hold";
   const cargo = tradeTable(["Item", "Qty", "Each", ""]);
 
-  // Repair Supplies: the port's stock and prices, what's already aboard, and a Buy button per row.
+  // Ship Supplies (repair materials and cannonballs): the port's stock and prices, what's
+  // already aboard, and a Buy button per row.
   const suppliesHeading = document.createElement("h3");
-  suppliesHeading.textContent = "Repair Supplies";
+  suppliesHeading.textContent = "Ship Supplies";
   const supplies = tradeTable(["Item", "Price", "Available", "Aboard", ""]);
 
   const button = document.createElement("button");
@@ -120,7 +122,7 @@ export function createPortPanel(onSetSail: () => void): { sync: (state: GameStat
       name.append(swatch, CARGO[id].label);
       numberCell(row, player.cargo[id] ?? 0);
       numberCell(row, CARGO_VALUE[id]);
-      actionCell(row, "Sell", sellBlocker(player, port, id), () => trade((ship, p) => sellCargo(ship, p, id)));
+      actionCell(row, [{ label: "Sell", blocker: sellBlocker(player, port, id), onClick: () => trade((ship, p) => sellCargo(ship, p, id)) }]);
     }
 
     supplies.body.replaceChildren();
@@ -130,7 +132,14 @@ export function createPortPanel(onSetSail: () => void): { sync: (state: GameStat
       numberCell(row, SUPPLY_PRICE[id]);
       numberCell(row, port.supplies[id]);
       numberCell(row, player.supplies[id] ?? 0);
-      actionCell(row, "Buy", buyBlocker(player, port, id), () => trade((ship, p) => buySupply(ship, p, id)));
+      actionCell(row, [
+        { label: "Buy", blocker: buyBlocker(player, port, id), onClick: () => trade((ship, p) => buySupply(ship, p, id)) },
+        {
+          label: `Buy ${BULK_BUY}`,
+          blocker: buyBlocker(player, port, id, BULK_BUY),
+          onClick: () => trade((ship, p) => buySupply(ship, p, id, BULK_BUY)),
+        },
+      ]);
     }
   }
 
@@ -169,16 +178,21 @@ function numberCell(row: HTMLTableRowElement, value: number): void {
   cell.textContent = String(value);
 }
 
-/** A small Buy/Sell button, disabled with the reason as its tooltip when the trade isn't possible. */
-function actionCell(row: HTMLTableRowElement, label: string, blocker: string | null, onClick: () => void): void {
+/** Small Buy/Sell buttons, each disabled with the reason as its tooltip when its trade isn't possible. */
+function actionCell(
+  row: HTMLTableRowElement,
+  actions: { label: string; blocker: string | null; onClick: () => void }[],
+): void {
   const cell = row.insertCell();
   cell.className = "action";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "trade";
-  button.textContent = label;
-  button.disabled = blocker !== null;
-  if (blocker) button.title = blocker;
-  button.addEventListener("click", onClick);
-  cell.append(button);
+  for (const { label, blocker, onClick } of actions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "trade";
+    button.textContent = label;
+    button.disabled = blocker !== null;
+    if (blocker) button.title = blocker;
+    button.addEventListener("click", onClick);
+    cell.append(button);
+  }
 }

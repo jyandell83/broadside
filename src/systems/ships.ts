@@ -1,5 +1,5 @@
 import type { GameState, Ship, Vec2 } from "../types";
-import { SHOT_RANGE } from "./weapons";
+import { SHOT_RANGE, STARTING_CANNONBALLS } from "./weapons";
 import { SINK_DURATION } from "./effects";
 import { HULL, SHIP_SCALE } from "./hull";
 import { isOnLand, pushOutOfLand } from "./islands";
@@ -44,7 +44,7 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     smokeTimer: 0,
     pendingShots: [],
     cargo: {},
-    supplies: {},
+    supplies: { cannonballs: STARTING_CANNONBALLS },
     docked: null,
   };
 }

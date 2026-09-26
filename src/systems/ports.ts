@@ -20,7 +20,7 @@ const PORT_DEFS: { id: string; name: string; islandId: string; angle: number; st
     angle: 0,
     style: { roof: "#a4553a", roofMain: "#8e3f2a", flag: "#e8c35a" }, // terracotta roofs, gold flag
     // Placeholder stock: a timber and rope town.
-    supplies: { timber: 24, oakum: 16, pitch: 11, rope: 30, sailcloth: 18, iron: 9 },
+    supplies: { timber: 24, oakum: 16, pitch: 11, rope: 30, sailcloth: 18, iron: 9, cannonballs: 200 },
   },
   {
     // In the back of Wickham's sheltered cove: sail in through the entrance to reach it.
@@ -31,7 +31,7 @@ const PORT_DEFS: { id: string; name: string; islandId: string; angle: number; st
     // Slate roofs, red flag, and a lighthouse on the north headland marking the entrance.
     style: { roof: "#5d6f84", roofMain: "#46566a", flag: "#c8433a", lighthouse: { islandId: "wickham-ntip", angle: 2.3 } },
     // Placeholder stock: a sheltered yard, stronger in sailcloth, pitch and iron.
-    supplies: { timber: 12, oakum: 22, pitch: 19, rope: 14, sailcloth: 26, iron: 15 },
+    supplies: { timber: 12, oakum: 22, pitch: 19, rope: 14, sailcloth: 26, iron: 15, cannonballs: 150 },
   },
 ];
 

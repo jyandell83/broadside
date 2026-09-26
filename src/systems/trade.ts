@@ -23,6 +23,7 @@ export const SUPPLY_PRICE: Record<SupplyId, number> = {
   rope: 6,
   pitch: 3,
   oakum: 2,
+  cannonballs: 1,
 };
 
 export type SellableCargo = keyof typeof CARGO_VALUE;
@@ -38,23 +39,30 @@ function mooredAt(ship: Ship, port: Port): boolean {
   return ship.docked?.phase === "moored" && ship.docked.portId === port.id;
 }
 
-/** Why the ship can't buy one unit of this supply here, or null if it can. */
-export function buyBlocker(ship: Ship, port: Port, id: SupplyId): string | null {
+/** Why the ship can't buy `qty` units of this supply here, or null if it can. */
+export function buyBlocker(ship: Ship, port: Port, id: SupplyId, qty = 1): string | null {
   if (!mooredAt(ship, port)) return "Not docked here";
-  if (port.supplies[id] <= 0) return "Out of stock";
-  if (coinOf(ship) < SUPPLY_PRICE[id]) return "Not enough coin";
+  const stock = port.supplies[id];
+  if (stock <= 0) return "Out of stock";
+  if (stock < qty) return `Only ${stock} in stock`;
+  if (coinOf(ship) < SUPPLY_PRICE[id] * qty) return "Not enough coin";
   return null;
 }
 
-/** Buys one unit: coin from the ship, a unit from the port's stock into the ship's supplies. */
-export function buySupply(ship: Ship, port: Port, id: SupplyId): TradeResult {
-  const blocker = buyBlocker(ship, port, id);
+/**
+ * Buys exactly `qty` units (default 1), or nothing if the whole lot can't be had: coin from the
+ * ship, units from the port's stock into the ship's supplies.
+ */
+export function buySupply(ship: Ship, port: Port, id: SupplyId, qty = 1): TradeResult {
+  const blocker = buyBlocker(ship, port, id, qty);
   if (blocker) return { ok: false, reason: blocker };
-  const price = SUPPLY_PRICE[id];
-  ship.cargo.coin = coinOf(ship) - price;
-  port.supplies[id] -= 1;
-  ship.supplies[id] = (ship.supplies[id] ?? 0) + 1;
-  return { ok: true, message: `Bought 1 ${SUPPLIES[id].label} for ${price} coin` };
+  const cost = SUPPLY_PRICE[id] * qty;
+  ship.cargo.coin = coinOf(ship) - cost;
+  port.supplies[id] -= qty;
+  ship.supplies[id] = (ship.supplies[id] ?? 0) + qty;
+  const def: { label: string; singular?: string } = SUPPLIES[id];
+  const name = qty === 1 ? (def.singular ?? def.label) : def.label;
+  return { ok: true, message: `Bought ${qty} ${name} for ${cost} coin` };
 }
 
 /** Why the ship can't sell one unit of this cargo here, or null if it can. */

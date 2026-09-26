@@ -74,7 +74,7 @@ There is no test runner yet.
     - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
   - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that.
     - Each port has a `style` (roof and flag colours, an optional lighthouse on any blob's coast) for its visual identity.
-    - Each port def has a `supplies` stock of repair supplies (`systems/supplies.ts`: Timber, Oakum, Pitch, Rope, Sailcloth, Iron). `createPorts` copies it onto the port, so trading changes this game's stock without touching the defs.
+    - Each port def has a `supplies` stock of ship supplies (`systems/supplies.ts`: Timber, Oakum, Pitch, Rope, Sailcloth, Iron, and Cannonballs). `createPorts` copies it onto the port, so trading changes this game's stock without touching the defs.
     - Supplies are separate from cargo (`CARGO`) so loot never drops them.
     - Future per-port data (prices, services) goes on the def.
     - Everything else (docking, prompts, the panel, off-screen markers) is shared, so a new port is one entry here plus its island.
@@ -89,10 +89,17 @@ There is no test runner yet.
   - Trading (`systems/trade.ts`) holds all prices and the trading rules.
     - `CARGO_VALUE` is what ports pay per unit of cargo (coin is currency and isn't traded). `SUPPLY_PRICE` is what a supply costs. Every port uses these base values for now.
     - `sellCargo` and `buySupply` check the rules (moored at that port, cargo held, in stock, enough coin), make the change, and return a message or a reason. `sellBlocker` and `buyBlocker` give the reason without trading, which the UI uses to disable buttons.
+    - `buySupply`/`buyBlocker` take a quantity (default 1) and buy exactly that many or nothing. The panel's Buy 10 uses it.
     - Keep prices and rules there, not in the UI.
-  - Ship inventory: `ship.cargo` is the hold (loot and trade goods, plus `coin`); `ship.supplies` holds repair supplies bought in port. They're kept separate on purpose, and future repairs should consume `ship.supplies`.
+  - Ship inventory: `ship.cargo` is the hold (loot and trade goods, plus `coin`); `ship.supplies` holds ship supplies (repair materials and cannonballs). They're kept separate on purpose, and future repairs should consume `ship.supplies`.
+  - Ammunition is the `cannonballs` supply.
+    - Ships start with `STARTING_CANNONBALLS` (100, in `weapons.ts`).
+    - `fireBroadside` queues only as many guns as `cannonballsFree` (balls aboard minus guns already queued), bow first. With none, nothing fires and the reload doesn't start.
+    - `fireGun` uses up one ball as each gun fires.
+    - Buying goes through the normal `buySupply`, at `SUPPLY_PRICE.cannonballs`.
+    - The HUD shows the count on the reload line, amber below `LOW_CANNONBALLS`.
   - The Port screen is a DOM panel (`src/ui/portPanel.ts`, styled in `style.css`), not canvas. `portPanel.sync(state)` runs each tick and shows it while the player is moored.
-    - It shows coin, a Cargo Hold table with Sell buttons, and a Repair Supplies table (price, available, aboard) with Buy buttons, then redraws after each trade.
+    - It shows coin, a Cargo Hold table with Sell buttons, and a Ship Supplies table (price, available, aboard) with Buy and Buy 10 buttons, then redraws after each trade.
     - It only calls the `trade.ts` functions and keeps no game state of its own.
     - Put future menu-style UI in the DOM too.
   - Loot: `updateShips` returns the wrecks it removed this tick, and `main.ts` passes enemy wrecks to `dropWreckCargo`. Loot therefore spawns where the wreck finally went down, and is tied to the removal, not the sinking animation.
