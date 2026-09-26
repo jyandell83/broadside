@@ -1,5 +1,5 @@
 import type { CargoId } from "./systems/cargo";
-import type { SupplyStock } from "./systems/supplies";
+import type { SupplyId, SupplyStock } from "./systems/supplies";
 
 export interface Vec2 {
   x: number;
@@ -44,7 +44,8 @@ export interface Ship {
   sinkSpin: number; // rad/s the wreck slowly turns while sinking
   smokeTimer: number; // seconds until the next damage smoke puff
   pendingShots: PendingShot[]; // guns of a broadside still waiting to fire (ripple fire)
-  cargo: Partial<Record<CargoId, number>>; // the cargo hold: units of each cargo type
+  cargo: Partial<Record<CargoId, number>>; // the cargo hold: units of each cargo type (coin included)
+  supplies: Partial<Record<SupplyId, number>>; // repair supplies aboard, bought at port; for repairs later
   docked: Docking | null; // coming alongside or moored at a port; can't sail or fire
 }
 

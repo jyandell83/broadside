@@ -74,7 +74,7 @@ There is no test runner yet.
     - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
   - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that.
     - Each port has a `style` (roof and flag colours, an optional lighthouse on any blob's coast) for its visual identity.
-    - Each port def has a `supplies` stock of repair supplies (`systems/supplies.ts`: Timber, Oakum, Pitch, Rope, Sailcloth, Iron). `createPorts` copies it onto the port, so a game can change a port's stock without touching the defs. The Port panel lists it in a Repair Supplies table (Item | Available); add columns there for prices or buy/sell.
+    - Each port def has a `supplies` stock of repair supplies (`systems/supplies.ts`: Timber, Oakum, Pitch, Rope, Sailcloth, Iron). `createPorts` copies it onto the port, so trading changes this game's stock without touching the defs.
     - Supplies are separate from cargo (`CARGO`) so loot never drops them.
     - Future per-port data (prices, services) goes on the def.
     - Everything else (docking, prompts, the panel, off-screen markers) is shared, so a new port is one entry here plus its island.
@@ -86,11 +86,19 @@ There is no test runner yet.
     - `phase` is `"approach"` until the ship reaches the berth, then `"moored"`. The Port panel opens and Set Sail works only when moored.
     - Steering toward the berth by feedback circled instead of arriving (the docking area is only a few turning circles across), which is why the path is planned.
     - Enemy AI won't fire at a docked player.
-  - The Port screen is a DOM panel (`src/ui/portPanel.ts`, styled in `style.css`), not canvas. `portPanel.sync(state)` runs each tick and shows it while the player is docked, reading `ship.cargo` directly. Put future menu-style UI (trading and so on) in the DOM too.
+  - Trading (`systems/trade.ts`) holds all prices and the trading rules.
+    - `CARGO_VALUE` is what ports pay per unit of cargo (coin is currency and isn't traded). `SUPPLY_PRICE` is what a supply costs. Every port uses these base values for now.
+    - `sellCargo` and `buySupply` check the rules (moored at that port, cargo held, in stock, enough coin), make the change, and return a message or a reason. `sellBlocker` and `buyBlocker` give the reason without trading, which the UI uses to disable buttons.
+    - Keep prices and rules there, not in the UI.
+  - Ship inventory: `ship.cargo` is the hold (loot and trade goods, plus `coin`); `ship.supplies` holds repair supplies bought in port. They're kept separate on purpose, and future repairs should consume `ship.supplies`.
+  - The Port screen is a DOM panel (`src/ui/portPanel.ts`, styled in `style.css`), not canvas. `portPanel.sync(state)` runs each tick and shows it while the player is moored.
+    - It shows coin, a Cargo Hold table with Sell buttons, and a Repair Supplies table (price, available, aboard) with Buy buttons, then redraws after each trade.
+    - It only calls the `trade.ts` functions and keeps no game state of its own.
+    - Put future menu-style UI in the DOM too.
   - Loot: `updateShips` returns the wrecks it removed this tick, and `main.ts` passes enemy wrecks to `dropWreckCargo`. Loot therefore spawns where the wreck finally went down, and is tied to the removal, not the sinking animation.
     - `state.loot` is not a collider. Only the player's pickup check in `updateLoot` reads it, by sailing within `radius + PICKUP_REACH`.
-    - Collected cargo goes into `ship.cargo`, the hold. The Cargo Hold panel is drawn bottom-left.
-    - Cargo types are data in `systems/cargo.ts` (`CARGO`). Add types or properties (value, weight, rarity) there.
+    - Collected cargo goes into `ship.cargo`, the hold. The Cargo Hold panel is drawn bottom-left and also lists supplies aboard.
+    - Cargo types are data in `systems/cargo.ts` (`CARGO`). Add types or properties (weight, rarity) there; prices live in `systems/trade.ts`.
   - `systems/effects.ts` handles visual-only combat feedback (`state.particles`, `state.shake`, `ship.jolt`/`joltSpin`): impact flash, splinters and smoke via `cannonImpact` (called from collision), damage smoke and fires below 70% HP, sinking bubbles and wreckage, and camera shake. Jolt and shake are offsets applied only when drawing; never feed them back into positions or aim.
   - Wave marks are fixed to world positions so the player's motion is visible. The wind streaks tile the viewport but are offset by the camera so they move with the air.
 - Movement is wind-driven (age of sail), with no throttle. `systems/wind.ts` holds the sailing model:

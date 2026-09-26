@@ -44,6 +44,7 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     smokeTimer: 0,
     pendingShots: [],
     cargo: {},
+    supplies: {},
     docked: null,
   };
 }

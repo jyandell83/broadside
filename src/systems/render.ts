@@ -5,6 +5,7 @@ import { worldToScreen } from "./camera";
 import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
 import { SHIP_SCALE } from "./hull";
 import { CARGO, CARGO_IDS, cargoText, type CargoDef } from "./cargo";
+import { SUPPLIES, SUPPLY_IDS } from "./supplies";
 import { PICKUP_FX_DURATION, SURFACE_TIME } from "./loot";
 import { coastPoint, coastRadius, maxRadius } from "./islands";
 import { dockStatus, dockablePort, getPort } from "./ports";
@@ -912,14 +913,19 @@ function drawLootPickups(ctx: CanvasRenderingContext2D, state: GameState): void 
   ctx.textAlign = "left";
 }
 
-/** Small panel, bottom-left: what's in the player's hold. Rows light up briefly on pickup. */
+/**
+ * Small panel, bottom-left: what's in the player's hold, then any repair supplies aboard.
+ * Cargo rows light up briefly on pickup.
+ */
 function drawCargoHold(ctx: CanvasRenderingContext2D, state: GameState): void {
   const player = getPlayer(state);
   if (!player) return;
   const rows = CARGO_IDS.filter((id) => (player.cargo[id] ?? 0) > 0);
+  const supplyRows = SUPPLY_IDS.filter((id) => (player.supplies[id] ?? 0) > 0);
   const ROW = 18;
   const w = 150;
-  const h = 26 + Math.max(1, rows.length) * ROW;
+  const suppliesHeight = supplyRows.length > 0 ? (supplyRows.length + 1) * ROW : 0;
+  const h = 26 + Math.max(1, rows.length) * ROW + suppliesHeight;
   const x = 12;
   const y = state.viewport.height - h - 12;
 
@@ -938,7 +944,6 @@ function drawCargoHold(ctx: CanvasRenderingContext2D, state: GameState): void {
   if (rows.length === 0) {
     ctx.fillStyle = COLORS.hudDim;
     ctx.fillText("Empty", x + 10, y + 17 + ROW);
-    return;
   }
   ctx.font = "13px system-ui, sans-serif";
   rows.forEach((id, i) => {
@@ -957,6 +962,22 @@ function drawCargoHold(ctx: CanvasRenderingContext2D, state: GameState): void {
     ctx.fillText(CARGO[id].label, x + 32, ry);
     ctx.textAlign = "right";
     ctx.fillText(String(player.cargo[id]), x + w - 10, ry);
+    ctx.textAlign = "left";
+  });
+
+  // Repair supplies aboard, bought in port.
+  if (supplyRows.length === 0) return;
+  const sy = y + 17 + Math.max(1, rows.length) * ROW + ROW;
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.fillStyle = COLORS.hudDim;
+  ctx.fillText("SUPPLIES", x + 10, sy);
+  ctx.font = "13px system-ui, sans-serif";
+  supplyRows.forEach((id, i) => {
+    const ry = sy + (i + 1) * ROW;
+    ctx.fillStyle = COLORS.hud;
+    ctx.fillText(SUPPLIES[id].label, x + 32, ry);
+    ctx.textAlign = "right";
+    ctx.fillText(String(player.supplies[id]), x + w - 10, ry);
     ctx.textAlign = "left";
   });
 }
