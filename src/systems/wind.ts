@@ -3,19 +3,28 @@ import type { Ship, Wind } from "../types";
 const DEG = Math.PI / 180;
 
 /**
- * Square rig: ships can't make headway closer to the wind than this.
- * Real square-riggers managed ~65°; a little closer keeps it arcade-friendly.
+ * Square rig: ships can't make headway closer to the wind than this. Real square-riggers
+ * managed ~65°; 55° (tuned in play) makes beating upwind less of a slog, with quicker tacks
+ * through a 110° dead zone. If you change it, keep POLAR's first row at the same angle and
+ * BRACE_LIMIT at least (180° − NO_GO) / 2.
  */
-export const NO_GO = 60 * DEG;
+export const NO_GO = 55 * DEG;
 
-/** How far the yards can be braced round from square across the ship. */
+/**
+ * How far the yards can be braced round from square across the ship. The ideal brace
+ * close-hauled is (180° − NO_GO) / 2 (62.5° at 55°), so this must be at least that.
+ */
 export const BRACE_LIMIT = 65 * DEG;
 
 /** How far the brace can be off ideal before the sails stop drawing at all. */
 const BRACE_TOLERANCE = 30 * DEG;
 
-/** Speed multiplier by angle off the wind (degrees). Square-riggers are happiest off the wind. */
+/**
+ * Speed multiplier by angle off the wind (degrees). Square-riggers are happiest off the wind.
+ * The first row sits at NO_GO; closer to the wind than that there's no drive at all.
+ */
 const POLAR: [number, number][] = [
+  [55, 0.42],
   [60, 0.5],
   [75, 0.75],
   [90, 0.9],
@@ -72,17 +81,27 @@ export function updateWind(wind: Wind, dt: number): void {
   wind.nextPrevailingShift -= dt;
   if (wind.nextPrevailingShift <= 0) {
     const pull = angleDiff(wind.climate, wind.prevailing) * PREVAILING_PULL;
-    const step = Math.max(-PREVAILING_STEP, Math.min(PREVAILING_STEP, rand(-PREVAILING_STEP, PREVAILING_STEP) + pull));
+    const step = Math.max(
+      -PREVAILING_STEP,
+      Math.min(PREVAILING_STEP, rand(-PREVAILING_STEP, PREVAILING_STEP) + pull),
+    );
     wind.prevailingTarget = wind.prevailing + step;
-    wind.nextPrevailingShift = rand(PREVAILING_INTERVAL_MIN, PREVAILING_INTERVAL_MAX);
+    wind.nextPrevailingShift = rand(
+      PREVAILING_INTERVAL_MIN,
+      PREVAILING_INTERVAL_MAX,
+    );
   }
-  wind.prevailing += angleDiff(wind.prevailingTarget, wind.prevailing) * PREVAILING_EASE * dt;
+  wind.prevailing +=
+    angleDiff(wind.prevailingTarget, wind.prevailing) * PREVAILING_EASE * dt;
 
   wind.nextShift -= dt;
   if (wind.nextShift <= 0) {
     // New direction near the current prevailing wind, and no more than MAX_SHIFT from now.
     const candidate = wind.prevailing + rand(-LOCAL_SPREAD, LOCAL_SPREAD);
-    const change = Math.max(-MAX_SHIFT, Math.min(MAX_SHIFT, angleDiff(candidate, wind.dir)));
+    const change = Math.max(
+      -MAX_SHIFT,
+      Math.min(MAX_SHIFT, angleDiff(candidate, wind.dir)),
+    );
     wind.targetDir = wind.dir + change;
     wind.targetStrength = rand(STRENGTH_MIN, STRENGTH_MAX);
     wind.nextShift = rand(SHIFT_INTERVAL_MIN, SHIFT_INTERVAL_MAX);
@@ -141,7 +160,8 @@ export function polarFactor(offWind: number): number {
 
 /** 1 when braced perfectly, falling to 0 as the brace gets further off. */
 export function braceEfficiency(ship: Ship, wind: Wind): number {
-  const err = angleDiff(ship.brace, idealBrace(ship.heading, wind)) / BRACE_TOLERANCE;
+  const err =
+    angleDiff(ship.brace, idealBrace(ship.heading, wind)) / BRACE_TOLERANCE;
   return Math.max(0, 1 - err * err);
 }
 

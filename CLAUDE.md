@@ -98,7 +98,8 @@ There is no test runner yet.
   - Ships are square-rigged. `ship.brace` is the angle of the sails' face from the bow (+ = toward starboard, 0 = yards square across), limited to ±`BRACE_LIMIT`.
   - The ideal brace is half the angle between the bow and the direction the wind blows toward (`idealBrace`).
   - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × braceEfficiency`.
-  - Ships within 60° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
+  - Ships within 55° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
+    - If you change `NO_GO`, move `POLAR`'s first row to the same angle and keep `BRACE_LIMIT` ≥ (180° − `NO_GO`) / 2.
   - `sailFill` is used only for visuals: how squarely the wind hits the back of the sail. Negative means "taken aback".
   - Arcade tuning: a ship never drops below `MIN_SPEED` (even in irons).
   - Steering is `max(rudder, pivot)`. Rudder authority grows with speed; the pivot boost gives full turn rate when nearly stopped, so a bad heading is always recoverable.
