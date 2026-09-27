@@ -54,16 +54,16 @@ function update(dt: number): void {
     else if (approach?.status === "ready") dock(player, approach.port);
   }
   if (player && !player.docked) {
-    const turn = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0);
+    const helm = (input.isDown("KeyD") ? 1 : 0) - (input.isDown("KeyA") ? 1 : 0); // moves the rudder
     const setSail = (input.isDown("KeyW") ? 1 : 0) - (input.isDown("KeyS") ? 1 : 0);
     const brace = (input.isDown("ArrowRight") ? 1 : 0) - (input.isDown("ArrowLeft") ? 1 : 0);
-    steerShip(player, turn, dt);
+    steerShip(player, helm, dt);
     adjustSails(player, setSail, brace, dt);
     if (input.isDown("KeyQ")) fireBroadside(player, "port");
     if (input.isDown("KeyE")) fireBroadside(player, "starboard");
   }
 
-  updateEnemyAI(state, dt, (ship, side) => fireBroadside(ship, side));
+  updateEnemyAI(state, (ship, side) => fireBroadside(ship, side));
   for (const wreck of updateShips(state, dt)) {
     if (wreck.team === "enemy") dropWreckCargo(state, wreck);
   }

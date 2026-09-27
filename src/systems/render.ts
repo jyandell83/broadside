@@ -3,7 +3,7 @@ import { getPlayer } from "./state";
 import { LOW_CANNONBALLS, SPLASH_DURATION } from "./weapons";
 import { worldToScreen } from "./camera";
 import { SINK_DURATION, fireSpots, shakeOffset } from "./effects";
-import { SHIP_SCALE } from "./hull";
+import { HULL, SHIP_SCALE } from "./hull";
 import { CARGO, CARGO_IDS, cargoText, type CargoDef } from "./cargo";
 import { SUPPLIES, SUPPLY_IDS } from "./supplies";
 import { PICKUP_FX_DURATION, SURFACE_TIME } from "./loot";
@@ -93,6 +93,12 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   }
   drawParticles(ctx, state, "air");
   drawLootPickups(ctx, state);
+  const player = getPlayer(state);
+  if (player && player.sinkAge === null && !player.docked) {
+    // Just below the ship, clear of the hull and sails whichever way she points (the bow is her
+    // longest reach), so ship and helm read together.
+    drawRudderIndicator(ctx, player.rudder, player.pos.x, player.pos.y + HULL.bow * SHIP_SCALE + 16);
+  }
   ctx.restore();
 
   // Screen space.
@@ -1092,6 +1098,41 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillRect(12, y, 120 * player.sailEfficiency, 8);
   ctx.fillStyle = COLORS.hud;
   ctx.fillText(braceAdvice(player, state.wind), 142, y + 8);
+}
+
+/**
+ * Compact "PORT ──┼── STBD" helm gauge centred at (cx, y), with a marker at the rudder position:
+ * green on the centre tick when amidships, gold when the rudder is over. Drawn slightly faded so
+ * it stays secondary to the ship above it.
+ */
+function drawRudderIndicator(ctx: CanvasRenderingContext2D, rudder: number, cx: number, y: number): void {
+  const trackW = 56;
+  const left = cx - trackW / 2;
+  const centred = Math.abs(rudder) < 0.01;
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.font = "9px system-ui, sans-serif";
+  ctx.fillStyle = COLORS.hudDim;
+  ctx.textAlign = "right";
+  ctx.fillText("PORT", left - 5, y + 3);
+  ctx.textAlign = "left";
+  ctx.fillText("STBD", left + trackW + 5, y + 3);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.fillRect(left - 1, y - 2, trackW + 2, 4);
+  ctx.fillStyle = COLORS.hpBack;
+  ctx.fillRect(left, y - 1, trackW, 2);
+  ctx.fillStyle = COLORS.hudDim;
+  ctx.fillRect(cx - 0.5, y - 4, 1, 8); // amidships tick
+  const mx = cx + (Math.max(-1, Math.min(1, rudder)) * trackW) / 2;
+  ctx.fillStyle = centred ? COLORS.braceGood : COLORS.port;
+  ctx.beginPath();
+  ctx.moveTo(mx, y - 1);
+  ctx.lineTo(mx - 4, y - 7);
+  ctx.lineTo(mx + 4, y - 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(mx - 1, y - 1, 2, 5);
+  ctx.restore();
 }
 
 function drawWindIndicator(ctx: CanvasRenderingContext2D, state: GameState): void {

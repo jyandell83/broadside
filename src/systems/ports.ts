@@ -99,6 +99,8 @@ export function dock(ship: Ship, port: Port): void {
   ship.docked = { portId: port.id, sailsBefore: ship.sails, heading, phase: "approach", path: null, pathLength: [], progress: 0 };
   ship.sails = 0; // sails furled while in port
   ship.pendingShots = [];
+  ship.rudder = 0; // the crew centres the helm, so she doesn't leave port still turning
+  ship.turnRate = 0;
 }
 
 /** Leave port. Only once moored; the ship lies along the shore, so it sails straight off. */

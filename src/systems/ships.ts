@@ -10,12 +10,21 @@ export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of 
 const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
 const DRAG = 0.4; // how quickly speed bleeds off when the target is lower
 const IRONS_DRAG = 0.9; // extra-fast slowdown when pointed into the wind
-const TURN_RATE = 1.0; // rad/s at full speed
-// Arcade tuning: rudder needs way on, but a nearly stopped ship can pivot to recover.
-const MIN_STEERAGE = 0.6; // fraction of turn rate from the rudder alone at zero speed
-const LOW_SPEED_STEERAGE = 1.0; // pivot boost when barely moving, so a bad heading is recoverable
-const PIVOT_FULL_BELOW = 0.2; // fraction of MAX_SPEED: full pivot boost below this
-const PIVOT_GONE_ABOVE = 0.4; // ...fading to nothing by this
+// Rudder: the helm sets the rudder's position, and the rudder turns the ship in proportion to
+// how fast she's moving through the water.
+const TURN_RATE = 1.0; // rad/s at full rudder and full bite
+const RUDDER_RATE = 1.0; // rudder travel per second: amidships to hard over in about a second
+const RUDDER_MAX = 1; // hard over (the rudder's range is ±RUDDER_MAX)
+const RUDDER_BITE_MIN_SPEED = 1; // px/s: slower than this, the rudder does nothing
+const RUDDER_BITE_FULL_SPEED = 30; // px/s (~6 kn): full rudder authority from here up
+const RUDDER_BITE_CURVE = 0.5; // <1 gives a little more bite at low speed (0.5: ~37% at the 1 kn minimum)
+const TURN_RESPONSE = 1.5; // per second: how quickly the ship's rate of turn follows the rudder
+// Centring aids: moving toward amidships, the rudder snaps to exactly 0 once within
+// RUDDER_CENTER_SNAP, then rests there for RUDDER_CENTER_DETENT before carrying on if the key is
+// still held. A tap stops at centre; holding steers straight through. Set the detent to 0 for
+// a plain snap.
+const RUDDER_CENTER_SNAP = 0.08;
+const RUDDER_CENTER_DETENT = 0.15; // seconds
 const MIN_SPEED = 5; // px/s (~1 kn); ships never fully stop, even in irons
 const SAIL_RATE = 0.8; // sails set/furled per second
 const BRACE_RATE = Math.PI / 2; // rad/s the crew can swing the yards
@@ -27,6 +36,9 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
     pos: { ...pos },
     heading,
     speed: 0,
+    rudder: 0,
+    rudderHold: 0,
+    turnRate: 0,
     sails: 0.5,
     brace: 0,
     offWind: 0,
@@ -49,20 +61,34 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
   };
 }
 
-/** turn: -1 (to port) .. 1 (to starboard). */
-export function steerShip(ship: Ship, turn: number, dt: number): void {
+/**
+ * The helm: `input` -1 moves the rudder toward port, 1 toward starboard, 0 leaves it where it
+ * is. The rudder doesn't centre itself; it turns the ship in updateShips.
+ */
+export function steerShip(ship: Ship, input: number, dt: number): void {
   if (ship.sinkAge !== null || ship.docked) return;
-  turnShip(ship, turn, dt);
+  if (input === 0) {
+    ship.rudderHold = 0; // released: the next press moves the helm straight away
+    return;
+  }
+  if (ship.rudderHold > 0) {
+    ship.rudderHold -= dt; // resting at amidships
+    return;
+  }
+  const prev = ship.rudder;
+  let next = Math.max(-RUDDER_MAX, Math.min(RUDDER_MAX, prev + input * RUDDER_RATE * dt));
+  const towardCentre = prev !== 0 && Math.sign(input) !== Math.sign(prev);
+  if (towardCentre && (Math.abs(next) <= RUDDER_CENTER_SNAP || Math.sign(next) !== Math.sign(prev))) {
+    next = 0;
+    ship.rudderHold = RUDDER_CENTER_DETENT;
+  }
+  ship.rudder = next;
 }
 
-/** The ship's turning: shared by player steering and the docking maneuver. */
-function turnShip(ship: Ship, turn: number, dt: number): void {
-  const r = Math.min(1, ship.speed / MAX_SPEED);
-  const rudder = MIN_STEERAGE + (1 - MIN_STEERAGE) * r;
-  const fade = (PIVOT_GONE_ABOVE - r) / (PIVOT_GONE_ABOVE - PIVOT_FULL_BELOW);
-  const pivot = LOW_SPEED_STEERAGE * Math.min(1, Math.max(0, fade));
-  const steerage = Math.max(rudder, pivot);
-  ship.heading += turn * TURN_RATE * steerage * dt;
+/** How much the rudder can turn the ship at this speed: 0 when stopped, 1 at sailing speed. */
+export function rudderBite(speed: number): number {
+  const f = (speed - RUDDER_BITE_MIN_SPEED) / (RUDDER_BITE_FULL_SPEED - RUDDER_BITE_MIN_SPEED);
+  return Math.pow(Math.max(0, Math.min(1, f)), RUDDER_BITE_CURVE);
 }
 
 /** setDelta: +1 to raise sail, -1 to furl. braceDelta: +1 swings the yards toward starboard, -1 toward port. */
@@ -89,10 +115,10 @@ const SINK_DRAG = 0.8; // how quickly a wreck loses way
 // Arcade grounding: running into land costs speed in proportion to how squarely you hit, and
 // the bow is swung along the shore so the ship slides off rather than sticking.
 const GROUNDING_DRAG = 3; // per second, at a head-on hit
-// Kept below the helm's weakest turn rate (TURN_RATE × MIN_STEERAGE-ish ≈ 0.7 rad/s), so a
-// player steering away from land always wins; in a corner between blobs, a stronger deflection
-// could hold the bow against the shore.
-const DEFLECT_RATE = 0.6; // rad/s the bow is turned toward the shoreline, at a head-on hit
+// Kept below what full rudder can do at the ~1 kn minimum speed (TURN_RATE × rudderBite(MIN_SPEED)
+// ≈ 0.37 rad/s), so a player steering away from land always wins; in a corner between blobs, a
+// stronger deflection could hold the bow against the shore.
+const DEFLECT_RATE = 0.3; // rad/s the bow is turned toward the shoreline, at a head-on hit
 const WRECK_DRIFT = 0.04; // fraction of wind speed a wreck is pushed downwind
 
 /** Moves ships. Returns the wrecks that finished sinking and were removed this tick. */
@@ -125,6 +151,12 @@ export function updateShips(state: GameState, dt: number): Ship[] {
     const rate = target > ship.speed ? ACCEL : ship.offWind < NO_GO ? IRONS_DRAG : DRAG;
     ship.speed += (target - ship.speed) * rate * dt;
     ship.speed = Math.max(MIN_SPEED, ship.speed);
+
+    // Turning: the rudder asks for a rate of turn in proportion to its position and to how much
+    // bite it has at this speed; the ship eases into that rate, so she enters a curve.
+    const wanted = (ship.rudder / RUDDER_MAX) * TURN_RATE * rudderBite(ship.speed);
+    ship.turnRate += (wanted - ship.turnRate) * (1 - Math.exp(-TURN_RESPONSE * dt));
+    ship.heading += ship.turnRate * dt;
 
     ship.pos.x += Math.cos(ship.heading) * ship.speed * dt;
     ship.pos.y += Math.sin(ship.heading) * ship.speed * dt;
@@ -268,13 +300,13 @@ function updateDocking(state: GameState, ship: Ship, dt: number): void {
 }
 
 /** Placeholder enemy behaviour: sail in circles and fire when the player is abeam. */
-export function updateEnemyAI(state: GameState, dt: number, fire: (ship: Ship, side: "port" | "starboard") => void): void {
+export function updateEnemyAI(state: GameState, fire: (ship: Ship, side: "port" | "starboard") => void): void {
   // Enemies leave a docked player alone: ports are safe harbour.
   const player = state.ships.find((s) => s.team === "player" && s.sinkAge === null && !s.docked);
   for (const ship of state.ships) {
     if (ship.team !== "enemy" || ship.sinkAge !== null) continue;
     ship.sails = 1;
-    steerShip(ship, 0.4, dt);
+    ship.rudder = 0.4; // holds a steady starboard helm, so it sails in circles
     autoBrace(state, ship);
     if (!player || Math.hypot(player.pos.x - ship.pos.x, player.pos.y - ship.pos.y) > SHOT_RANGE) continue;
     const angle = Math.atan2(player.pos.y - ship.pos.y, player.pos.x - ship.pos.x) - ship.heading;

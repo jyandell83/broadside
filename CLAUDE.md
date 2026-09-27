@@ -70,7 +70,7 @@ There is no test runner yet.
     - Rendering (`islandPath`), land collision (`pushOutOfLand`, `isOnLand`) and port placement all use `coastRadius`, so they always agree.
     - Ships are pushed out radially, in a few passes, so a corner between blobs can't trap them. `pushOutOfLand` returns the combined direction away from the land touched.
     - `updateShips` then drains speed and swings the bow along the shore in proportion to how squarely it hit, so ships slide off the coast rather than sticking.
-    - `DEFLECT_RATE` must stay below the helm's weakest turn rate, or the bow can be held against the shore in a corner.
+    - `DEFLECT_RATE` must stay below what full rudder gives at `MIN_SPEED` (`TURN_RATE × rudderBite(MIN_SPEED)`), or the bow can be held against the shore in a corner.
     - Cannonballs stop on land (`landImpact`), and loot can't drift ashore.
   - Ports (`systems/ports.ts`, data in `PORT_DEFS`) are an island plus the direction the harbour faces; pier, berth, docking area and buoys are derived from that.
     - Each port has a `style` (roof and flag colours, an optional lighthouse on any blob's coast) for its visual identity.
@@ -117,7 +117,14 @@ There is no test runner yet.
     - If you change `NO_GO`, move `POLAR`'s first row to the same angle and keep `BRACE_LIMIT` ≥ (180° − `NO_GO`) / 2.
   - `sailFill` is used only for visuals: how squarely the wind hits the back of the sail. Negative means "taken aback".
   - Arcade tuning: a ship never drops below `MIN_SPEED` (even in irons).
-  - Steering is `max(rudder, pivot)`. Rudder authority grows with speed; the pivot boost gives full turn rate when nearly stopped, so a bad heading is always recoverable.
+  - Steering is a rudder.
+    - A/D move `ship.rudder` (-1 port … 1 starboard) at `RUDDER_RATE`. It stays where it's left, with no self-centring.
+    - Moving toward centre, it snaps to exactly 0 within `RUDDER_CENTER_SNAP`, then rests there for `RUDDER_CENTER_DETENT` (tracked by `ship.rudderHold`) before continuing if the key is still held.
+    - The rudder gauge is drawn in world space just below the player's ship (`drawRudderIndicator`), not in the corner HUD.
+    - `updateShips` turns the ship: the target rate is `rudder × TURN_RATE × rudderBite(speed)`, and `ship.turnRate` eases toward it (`TURN_RESPONSE`), so she enters and leaves curves gradually.
+    - `rudderBite` is 0 when stopped, rises with speed (`RUDDER_BITE_*`), and gives full authority from about 6 kn. At the ~1 kn `MIN_SPEED` a hard-over rudder still turns her slowly (about 21°/s), so a bad heading is recoverable, just slowly.
+    - All the steering tuning is at the top of `ships.ts`.
+    - Docking centres the rudder, and the enemy AI holds a fixed rudder.
   - The wind shifts every 20–45s toward a new random direction and strength, and eases toward it over about 15s (`updateWind`).
   - The wind changes in two layers, both eased:
     - The prevailing wind (`wind.prevailing`) drifts slowly. Every 2.5–5 minutes it swings up to 50°, pulled partly back toward the long-run `wind.climate` (from the north).
