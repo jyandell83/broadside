@@ -27,6 +27,8 @@ const COLORS = {
   sailLuffing: "#9aa3ad",
   sailAback: "#d9a58f",
   yard: "#3b2715",
+  wheelWood: "#a0713f",
+  wheelOutline: "rgba(25, 15, 8, 0.8)",
   wood: "#c9a26b",
   wreckage: "#6b4a2b",
   scorch: "#1a120c",
@@ -95,9 +97,9 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState): void {
   drawLootPickups(ctx, state);
   const player = getPlayer(state);
   if (player && player.sinkAge === null && !player.docked) {
-    // Just below the ship, clear of the hull and sails whichever way she points (the bow is her
-    // longest reach), so ship and helm read together.
-    drawRudderIndicator(ctx, player.rudder, player.pos.x, player.pos.y + HULL.bow * SHIP_SCALE + 16);
+    // The ship's wheel, just below the ship and clear of the hull and sails whichever way she
+    // points (the bow is her longest reach), so ship and helm read together.
+    drawRudderIndicator(ctx, player.rudder, player.pos.x, player.pos.y + HULL.bow * SHIP_SCALE + WHEEL_HANDLE + 6);
   }
   ctx.restore();
 
@@ -1100,38 +1102,62 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState): void {
   ctx.fillText(braceAdvice(player, state.wind), 142, y + 8);
 }
 
+const WHEEL_RIM = 8; // px radius of the wheel's rim
+const WHEEL_HANDLE = 11.5; // px out to the tips of the spoke handles
+const WHEEL_MAX_TURN = (120 * Math.PI) / 180; // wheel rotation at hard over (not a literal turn count)
+
 /**
- * Compact "PORT ──┼── STBD" helm gauge centred at (cx, y), with a marker at the rudder position:
- * green on the centre tick when amidships, gold when the rudder is over. Drawn slightly faded so
- * it stays secondary to the ship above it.
+ * A small ship's wheel centred at (cx, cy), turned to show the rudder: the brass-tipped king spoke
+ * points straight up at amidships and swings clockwise for starboard, anticlockwise for port.
+ * Slightly faded so it stays secondary to the ship.
  */
-function drawRudderIndicator(ctx: CanvasRenderingContext2D, rudder: number, cx: number, y: number): void {
-  const trackW = 56;
-  const left = cx - trackW / 2;
-  const centred = Math.abs(rudder) < 0.01;
+function drawRudderIndicator(ctx: CanvasRenderingContext2D, rudder: number, cx: number, cy: number): void {
   ctx.save();
-  ctx.globalAlpha = 0.85;
-  ctx.font = "9px system-ui, sans-serif";
-  ctx.fillStyle = COLORS.hudDim;
-  ctx.textAlign = "right";
-  ctx.fillText("PORT", left - 5, y + 3);
-  ctx.textAlign = "left";
-  ctx.fillText("STBD", left + trackW + 5, y + 3);
-  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-  ctx.fillRect(left - 1, y - 2, trackW + 2, 4);
-  ctx.fillStyle = COLORS.hpBack;
-  ctx.fillRect(left, y - 1, trackW, 2);
-  ctx.fillStyle = COLORS.hudDim;
-  ctx.fillRect(cx - 0.5, y - 4, 1, 8); // amidships tick
-  const mx = cx + (Math.max(-1, Math.min(1, rudder)) * trackW) / 2;
-  ctx.fillStyle = centred ? COLORS.braceGood : COLORS.port;
+  ctx.globalAlpha = 0.9;
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.max(-1, Math.min(1, rudder)) * WHEEL_MAX_TURN);
+  ctx.lineCap = "round";
+
+  // Eight spokes with handles poking past the rim; spoke 0 (straight up) is the king spoke.
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a);
+    const y = Math.sin(a);
+    ctx.strokeStyle = COLORS.wheelOutline;
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(x * 2, y * 2);
+    ctx.lineTo(x * WHEEL_HANDLE, y * WHEEL_HANDLE);
+    ctx.stroke();
+    ctx.strokeStyle = COLORS.wheelWood;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    if (i === 0) {
+      ctx.strokeStyle = COLORS.port; // brass king-spoke tip
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(x * (WHEEL_RIM + 1), y * (WHEEL_RIM + 1));
+      ctx.lineTo(x * WHEEL_HANDLE, y * WHEEL_HANDLE);
+      ctx.stroke();
+    }
+  }
+
+  // Rim and hub.
   ctx.beginPath();
-  ctx.moveTo(mx, y - 1);
-  ctx.lineTo(mx - 4, y - 7);
-  ctx.lineTo(mx + 4, y - 7);
-  ctx.closePath();
+  ctx.arc(0, 0, WHEEL_RIM, 0, Math.PI * 2);
+  ctx.strokeStyle = COLORS.wheelOutline;
+  ctx.lineWidth = 3.6;
+  ctx.stroke();
+  ctx.strokeStyle = COLORS.wheelWood;
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+  ctx.fillStyle = COLORS.wheelWood;
+  ctx.strokeStyle = COLORS.wheelOutline;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillRect(mx - 1, y - 1, 2, 5);
+  ctx.stroke();
   ctx.restore();
 }
 

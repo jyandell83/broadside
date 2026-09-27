@@ -120,7 +120,7 @@ There is no test runner yet.
   - Steering is a rudder.
     - A/D move `ship.rudder` (-1 port … 1 starboard) at `RUDDER_RATE`. When released, it drifts back toward amidships at `RUDDER_RETURN_RATE` (hard over to centre in about 2s) and snaps to 0 within `RUDDER_CENTER_SNAP`. Set the rate to 0 to make the rudder stay where it's left.
     - Moving toward centre, it snaps to exactly 0 within `RUDDER_CENTER_SNAP`, then rests there for `RUDDER_CENTER_DETENT` (tracked by `ship.rudderHold`) before continuing if the key is still held.
-    - The rudder gauge is drawn in world space just below the player's ship (`drawRudderIndicator`), not in the corner HUD.
+    - The rudder is shown as a small ship's wheel drawn in world space just below the player's ship (`drawRudderIndicator`), not in the corner HUD. Its king spoke points up at amidships and turns by `rudder × WHEEL_MAX_TURN`.
     - `updateShips` turns the ship: the target rate is `rudder × TURN_RATE × rudderBite(speed)`, and `ship.turnRate` eases toward it (`TURN_RESPONSE`), so she enters and leaves curves gradually.
     - `rudderBite` is 0 when stopped, rises with speed (`RUDDER_BITE_*`), and gives full authority from about 6 kn. At the ~1 kn `MIN_SPEED` a hard-over rudder still turns her slowly (about 21°/s), so a bad heading is recoverable, just slowly.
     - All the steering tuning is at the top of `ships.ts`.
