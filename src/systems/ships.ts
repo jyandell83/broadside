@@ -25,6 +25,9 @@ const TURN_RESPONSE = 1.5; // per second: how quickly the ship's rate of turn fo
 // a plain snap.
 const RUDDER_CENTER_SNAP = 0.08;
 const RUDDER_CENTER_DETENT = 0.15; // seconds
+// Assisted centring: with no steering input, the rudder drifts back toward amidships at this
+// rate (per second), so hard over takes about 2s to straighten. 0 turns the assist off.
+const RUDDER_RETURN_RATE = RUDDER_MAX / 2;
 const MIN_SPEED = 5; // px/s (~1 kn); ships never fully stop, even in irons
 const SAIL_RATE = 0.8; // sails set/furled per second
 const BRACE_RATE = Math.PI / 2; // rad/s the crew can swing the yards
@@ -62,13 +65,16 @@ export function createShip(state: GameState, team: Ship["team"], pos: Vec2, head
 }
 
 /**
- * The helm: `input` -1 moves the rudder toward port, 1 toward starboard, 0 leaves it where it
- * is. The rudder doesn't centre itself; it turns the ship in updateShips.
+ * The helm: `input` -1 moves the rudder toward port, 1 toward starboard. With no input (0) the
+ * rudder drifts back toward amidships at RUDDER_RETURN_RATE and snaps to 0 near centre. The
+ * rudder turns the ship in updateShips.
  */
 export function steerShip(ship: Ship, input: number, dt: number): void {
   if (ship.sinkAge !== null || ship.docked) return;
   if (input === 0) {
     ship.rudderHold = 0; // released: the next press moves the helm straight away
+    const r = Math.abs(ship.rudder) - RUDDER_RETURN_RATE * dt;
+    ship.rudder = r <= RUDDER_CENTER_SNAP ? 0 : Math.sign(ship.rudder) * r;
     return;
   }
   if (ship.rudderHold > 0) {

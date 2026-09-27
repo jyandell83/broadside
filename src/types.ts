@@ -27,7 +27,7 @@ export interface Ship {
   pos: Vec2;
   heading: number; // radians, 0 = facing +x
   speed: number;
-  rudder: number; // helm position: -1 full port .. 0 amidships .. 1 full starboard; stays where it's put
+  rudder: number; // helm position: -1 full port .. 0 amidships .. 1 full starboard; drifts back to 0 when released
   rudderHold: number; // seconds the helm rests at amidships after snapping there (see steerShip)
   turnRate: number; // rad/s the ship is actually turning; eases toward what the rudder asks for
   sails: number; // 0 (furled) .. 1 (full sail)
