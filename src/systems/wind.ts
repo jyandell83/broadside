@@ -1,37 +1,9 @@
 import type { Ship, Wind } from "../types";
+import { BRACE_LIMIT, BRACE_TOLERANCE, NO_GO, POLAR, SAILING_BONUS_FROM, SAILING_BONUS_KNOTS } from "../tuning";
+
+// Ship-handling values (no-go zone, drive by angle, bracing, sailing bonus) live in src/tuning.ts.
 
 const DEG = Math.PI / 180;
-
-/**
- * Square rig: ships can't make headway closer to the wind than this. Real square-riggers
- * managed ~65°; 55° (tuned in play) makes beating upwind less of a slog, with quicker tacks
- * through a 110° dead zone. If you change it, keep POLAR's first row at the same angle and
- * BRACE_LIMIT at least (180° − NO_GO) / 2.
- */
-export const NO_GO = 55 * DEG;
-
-/**
- * How far the yards can be braced round from square across the ship. The ideal brace
- * close-hauled is (180° − NO_GO) / 2 (62.5° at 55°), so this must be at least that.
- */
-export const BRACE_LIMIT = 65 * DEG;
-
-/** How far the brace can be off ideal before the sails stop drawing at all. */
-const BRACE_TOLERANCE = 30 * DEG;
-
-/**
- * Speed multiplier by angle off the wind (degrees). Square-riggers are happiest off the wind.
- * The first row sits at NO_GO; closer to the wind than that there's no drive at all.
- */
-const POLAR: [number, number][] = [
-  [55, 0.42],
-  [60, 0.5],
-  [75, 0.75],
-  [90, 0.9],
-  [120, 1],
-  [150, 1],
-  [180, 0.9],
-];
 
 /** One speed scale for ships and wind, so the readouts and on-screen motion agree. */
 export const PX_PER_KNOT = 5;
@@ -144,11 +116,6 @@ export function idealBrace(heading: number, wind: Wind): number {
   const half = windToRelative(heading, wind) / 2;
   return Math.max(-BRACE_LIMIT, Math.min(BRACE_LIMIT, half));
 }
-
-/** Top speed bonus (knots) for sailing particularly well; try 1–2. */
-export const SAILING_BONUS_KNOTS = 1;
-/** The bonus fades in as polarFactor rises from here to its 1.0 peak (the 120–150° broad reach). */
-const SAILING_BONUS_FROM = 0.85;
 
 /**
  * A small speed reward (px/s) for sailing well: up to SAILING_BONUS_KNOTS on the best point of

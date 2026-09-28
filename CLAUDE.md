@@ -50,7 +50,10 @@ There is no test runner yet.
   - projectiles at `life <= 0` in `updateProjectiles`, which leaves a `Splash` (so `life` is effectively the shot's range)
   - projectiles that hit a ship in `resolveCollisions`
 - `Input.wasPressed` is true only on the first tick a key goes down; `endFrame()` must stay at the end of `update`.
-- Tuning constants (speeds, reload time, damage) sit at the top of each system file.
+- Ship handling (speed, drag, rudder and steering, no-go zone, `POLAR`, bracing, sailing bonus, shore contact) is tuned by hand in `src/tuning.ts`. Each value has a comment saying what it controls.
+  - `checkTuning()` runs at startup and warns in the console if an edit breaks a rule between values (for example `POLAR`'s first row must equal `NO_GO`).
+  - Keep new handling values there.
+  - Other tuning constants (weather, docking, combat, effects) still sit at the top of their system files.
 - Coordinates use screen-style axes (y down); `heading` 0 points toward +x, and starboard is `heading + PI/2`.
 - Ship size is one knob: `SHIP_SCALE` in `systems/hull.ts`.
   - Hull, gun and effect offsets are written in base (1×) units.
@@ -125,7 +128,7 @@ There is no test runner yet.
     - The rudder is shown as a small ship's wheel drawn in world space just below the player's ship (`drawRudderIndicator`), not in the corner HUD. Its king spoke points up at amidships and turns by `rudder × WHEEL_MAX_TURN`.
     - `updateShips` turns the ship: the target rate is `rudder × TURN_RATE × rudderBite(speed)`, and `ship.turnRate` eases toward it (`TURN_RESPONSE`), so she enters and leaves curves gradually.
     - `rudderBite` is 0 when stopped, rises with speed (`RUDDER_BITE_*`), and gives full authority from about 6 kn. At the ~1 kn `MIN_SPEED` a hard-over rudder still turns her slowly (about 21°/s), so a bad heading is recoverable, just slowly.
-    - All the steering tuning is at the top of `ships.ts`.
+    - All the steering values are in `src/tuning.ts`.
     - Docking centres the rudder, and the enemy AI holds a fixed rudder.
   - The wind shifts every 20–45s toward a new random direction and strength, and eases toward it over about 15s (`updateWind`).
   - The wind changes in two layers, both eased:

@@ -1,4 +1,5 @@
 import "./style.css";
+import { checkTuning } from "./tuning";
 import { Input } from "./systems/input";
 import { startLoop } from "./systems/loop";
 import { render } from "./systems/render";
@@ -17,6 +18,9 @@ import { createPortPanel } from "./ui/portPanel";
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
 const ctx = canvas?.getContext("2d");
 if (!canvas || !ctx) throw new Error("Canvas #game not found");
+
+// Hand-tuned values in src/tuning.ts: warn in the console if an edit breaks one of their rules.
+for (const warning of checkTuning()) console.warn(`[tuning] ${warning}`);
 
 const input = new Input();
 let state = createGameState(window.innerWidth, window.innerHeight);

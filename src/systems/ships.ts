@@ -4,33 +4,32 @@ import { SINK_DURATION } from "./effects";
 import { HULL, SHIP_SCALE } from "./hull";
 import { isOnLand, pushOutOfLand } from "./islands";
 import { getPort } from "./ports";
-import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor, sailingBonus } from "./wind";
+import { PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor, sailingBonus } from "./wind";
+import {
+  ACCEL,
+  BRACE_LIMIT,
+  BRACE_RATE,
+  DEFLECT_RATE,
+  DRAG,
+  GROUNDING_DRAG,
+  IRONS_DRAG,
+  MAX_SPEED,
+  MIN_SPEED,
+  NO_GO,
+  RUDDER_BITE_CURVE,
+  RUDDER_BITE_FULL_SPEED,
+  RUDDER_BITE_MIN_SPEED,
+  RUDDER_CENTER_DETENT,
+  RUDDER_CENTER_SNAP,
+  RUDDER_MAX,
+  RUDDER_RATE,
+  RUDDER_RETURN_RATE,
+  SAIL_RATE,
+  TURN_RATE,
+  TURN_RESPONSE,
+} from "../tuning";
 
-export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of sail
-const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
-const DRAG = 0.4; // how quickly speed bleeds off when the target is lower
-const IRONS_DRAG = 0.4; // slowdown when pointed into the wind (no drive; same as normal drag for now)
-// Rudder: the helm sets the rudder's position, and the rudder turns the ship in proportion to
-// how fast she's moving through the water.
-const TURN_RATE = 1.0; // rad/s at full rudder and full bite
-const RUDDER_RATE = 0.5; // rudder travel per second: amidships to hard over in about 2s
-const RUDDER_MAX = 1; // hard over (the rudder's range is ±RUDDER_MAX)
-const RUDDER_BITE_MIN_SPEED = 1; // px/s: slower than this, the rudder does nothing
-const RUDDER_BITE_FULL_SPEED = 30; // px/s (~6 kn): full rudder authority from here up
-const RUDDER_BITE_CURVE = 0.5; // <1 gives a little more bite at low speed (0.5: ~37% at the 1 kn minimum)
-const TURN_RESPONSE = 1.5; // per second: how quickly the ship's rate of turn follows the rudder
-// Centring aids: moving toward amidships, the rudder snaps to exactly 0 once within
-// RUDDER_CENTER_SNAP, then rests there for RUDDER_CENTER_DETENT before carrying on if the key is
-// still held. A tap stops at centre; holding steers straight through. Set the detent to 0 for
-// a plain snap.
-const RUDDER_CENTER_SNAP = 0.08;
-const RUDDER_CENTER_DETENT = 0.15; // seconds
-// Assisted centring: with no steering input, the rudder drifts back toward amidships at this
-// rate (per second), so hard over takes about 1.7s to straighten. 0 turns the assist off.
-const RUDDER_RETURN_RATE = 0.6;
-const MIN_SPEED = 5; // px/s (~1 kn); ships never fully stop, even in irons
-const SAIL_RATE = 0.8; // sails set/furled per second
-const BRACE_RATE = Math.PI / 2; // rad/s the crew can swing the yards
+export { MAX_SPEED };
 
 export function createShip(state: GameState, team: Ship["team"], pos: Vec2, heading: number): Ship {
   return {
@@ -118,13 +117,6 @@ export function startSinking(ship: Ship): void {
 }
 
 const SINK_DRAG = 0.8; // how quickly a wreck loses way
-// Arcade grounding: running into land costs speed in proportion to how squarely you hit, and
-// the bow is swung along the shore so the ship slides off rather than sticking.
-const GROUNDING_DRAG = 3; // per second, at a head-on hit
-// Kept below what full rudder can do at the ~1 kn minimum speed (TURN_RATE × rudderBite(MIN_SPEED)
-// ≈ 0.37 rad/s), so a player steering away from land always wins; in a corner between blobs, a
-// stronger deflection could hold the bow against the shore.
-const DEFLECT_RATE = 0.3; // rad/s the bow is turned toward the shoreline, at a head-on hit
 const WRECK_DRIFT = 0.04; // fraction of wind speed a wreck is pushed downwind
 
 /** Moves ships. Returns the wrecks that finished sinking and were removed this tick. */
