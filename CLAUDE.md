@@ -112,13 +112,15 @@ There is no test runner yet.
   - `state.wind.dir` is the direction the wind blows *toward*.
   - Ships are square-rigged. `ship.brace` is the angle of the sails' face from the bow (+ = toward starboard, 0 = yards square across), limited to ±`BRACE_LIMIT`.
   - The ideal brace is half the angle between the bow and the direction the wind blows toward (`idealBrace`).
-  - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × braceEfficiency`.
+  - A ship's target speed is `MAX_SPEED × wind strength × sails set × polarFactor(angle off the wind) × braceEfficiency + sailingBonus`.
+    - `sailingBonus` (`wind.ts`) rewards sailing well: up to `SAILING_BONUS_KNOTS` (1 kn) on the best point of sail (the 120–150° peak of `POLAR`) with the yards braced right and full sail.
+    - It fades smoothly as `polarFactor` drops toward 0.85 and with brace efficiency and sails set: about +0.25 kn on a beam reach or running, none close-hauled.
   - Ships within 55° of the wind (`NO_GO`) get no drive and slow down quickly, so going upwind means tacking through the wind on momentum.
     - If you change `NO_GO`, move `POLAR`'s first row to the same angle and keep `BRACE_LIMIT` ≥ (180° − `NO_GO`) / 2.
   - `sailFill` is used only for visuals: how squarely the wind hits the back of the sail. Negative means "taken aback".
   - Arcade tuning: a ship never drops below `MIN_SPEED` (even in irons).
   - Steering is a rudder.
-    - A/D move `ship.rudder` (-1 port … 1 starboard) at `RUDDER_RATE`. When released, it drifts back toward amidships at `RUDDER_RETURN_RATE` (hard over to centre in about 2s) and snaps to 0 within `RUDDER_CENTER_SNAP`. Set the rate to 0 to make the rudder stay where it's left.
+    - A/D move `ship.rudder` (-1 port … 1 starboard) at `RUDDER_RATE` (hard over after about 2s of holding). When released, it drifts back toward amidships at `RUDDER_RETURN_RATE` (hard over to centre in about 3.3s) and snaps to 0 within `RUDDER_CENTER_SNAP`. Set the rate to 0 to make the rudder stay where it's left.
     - Moving toward centre, it snaps to exactly 0 within `RUDDER_CENTER_SNAP`, then rests there for `RUDDER_CENTER_DETENT` (tracked by `ship.rudderHold`) before continuing if the key is still held.
     - The rudder is shown as a small ship's wheel drawn in world space just below the player's ship (`drawRudderIndicator`), not in the corner HUD. Its king spoke points up at amidships and turns by `rudder × WHEEL_MAX_TURN`.
     - `updateShips` turns the ship: the target rate is `rudder × TURN_RATE × rudderBite(speed)`, and `ship.turnRate` eases toward it (`TURN_RESPONSE`), so she enters and leaves curves gradually.

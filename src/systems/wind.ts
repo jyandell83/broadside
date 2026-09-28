@@ -145,6 +145,23 @@ export function idealBrace(heading: number, wind: Wind): number {
   return Math.max(-BRACE_LIMIT, Math.min(BRACE_LIMIT, half));
 }
 
+/** Top speed bonus (knots) for sailing particularly well; try 1–2. */
+export const SAILING_BONUS_KNOTS = 1;
+/** The bonus fades in as polarFactor rises from here to its 1.0 peak (the 120–150° broad reach). */
+const SAILING_BONUS_FROM = 0.85;
+
+/**
+ * A small speed reward (px/s) for sailing well: up to SAILING_BONUS_KNOTS on the best point of
+ * sail (polarFactor near 1) with the yards braced right and full sail. It fades smoothly with
+ * point of sail, brace and sail set, so there's no sudden jump: about a quarter on a beam reach
+ * or running, nothing close-hauled or with sails furled.
+ */
+export function sailingBonus(offWind: number, braceEfficiency: number, sails: number): number {
+  const t = Math.max(0, Math.min(1, (polarFactor(offWind) - SAILING_BONUS_FROM) / (1 - SAILING_BONUS_FROM)));
+  const pointOfSail = t * t * (3 - 2 * t); // smoothstep: eases in and out of the peak
+  return SAILING_BONUS_KNOTS * PX_PER_KNOT * pointOfSail * braceEfficiency * sails;
+}
+
 export function polarFactor(offWind: number): number {
   const deg = offWind / DEG;
   if (offWind < NO_GO) return 0;

@@ -4,7 +4,7 @@ import { SINK_DURATION } from "./effects";
 import { HULL, SHIP_SCALE } from "./hull";
 import { isOnLand, pushOutOfLand } from "./islands";
 import { getPort } from "./ports";
-import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor } from "./wind";
+import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, idealBrace, offWindAngle, polarFactor, sailingBonus } from "./wind";
 
 export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of sail
 const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
@@ -13,7 +13,7 @@ const IRONS_DRAG = 0.9; // extra-fast slowdown when pointed into the wind
 // Rudder: the helm sets the rudder's position, and the rudder turns the ship in proportion to
 // how fast she's moving through the water.
 const TURN_RATE = 1.0; // rad/s at full rudder and full bite
-const RUDDER_RATE = 1.0; // rudder travel per second: amidships to hard over in about a second
+const RUDDER_RATE = 0.5; // rudder travel per second: amidships to hard over in about 2s
 const RUDDER_MAX = 1; // hard over (the rudder's range is ±RUDDER_MAX)
 const RUDDER_BITE_MIN_SPEED = 1; // px/s: slower than this, the rudder does nothing
 const RUDDER_BITE_FULL_SPEED = 30; // px/s (~6 kn): full rudder authority from here up
@@ -26,8 +26,8 @@ const TURN_RESPONSE = 1.5; // per second: how quickly the ship's rate of turn fo
 const RUDDER_CENTER_SNAP = 0.08;
 const RUDDER_CENTER_DETENT = 0.15; // seconds
 // Assisted centring: with no steering input, the rudder drifts back toward amidships at this
-// rate (per second), so hard over takes about 2s to straighten. 0 turns the assist off.
-const RUDDER_RETURN_RATE = RUDDER_MAX / 2;
+// rate (per second), so hard over takes about 3.3s to straighten. 0 turns the assist off.
+const RUDDER_RETURN_RATE = 0.3;
 const MIN_SPEED = 5; // px/s (~1 kn); ships never fully stop, even in irons
 const SAIL_RATE = 0.8; // sails set/furled per second
 const BRACE_RATE = Math.PI / 2; // rad/s the crew can swing the yards
@@ -153,7 +153,9 @@ export function updateShips(state: GameState, dt: number): Ship[] {
     ship.offWind = offWindAngle(ship.heading, state.wind);
     ship.sailEfficiency = braceEfficiency(ship, state.wind);
 
-    const target = MAX_SPEED * state.wind.strength * ship.sails * polarFactor(ship.offWind) * ship.sailEfficiency;
+    const target =
+      MAX_SPEED * state.wind.strength * ship.sails * polarFactor(ship.offWind) * ship.sailEfficiency +
+      sailingBonus(ship.offWind, ship.sailEfficiency, ship.sails);
     const rate = target > ship.speed ? ACCEL : ship.offWind < NO_GO ? IRONS_DRAG : DRAG;
     ship.speed += (target - ship.speed) * rate * dt;
     ship.speed = Math.max(MIN_SPEED, ship.speed);
