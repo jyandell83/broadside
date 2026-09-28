@@ -9,7 +9,7 @@ import { BRACE_LIMIT, NO_GO, PX_PER_KNOT, WIND_MAX_KNOTS, braceEfficiency, ideal
 export const MAX_SPEED = 60; // px/s at full sail, perfect brace, best point of sail
 const ACCEL = 0.5; // how quickly speed rises toward the sail-driven target
 const DRAG = 0.4; // how quickly speed bleeds off when the target is lower
-const IRONS_DRAG = 0.9; // extra-fast slowdown when pointed into the wind
+const IRONS_DRAG = 0.4; // slowdown when pointed into the wind (no drive; same as normal drag for now)
 // Rudder: the helm sets the rudder's position, and the rudder turns the ship in proportion to
 // how fast she's moving through the water.
 const TURN_RATE = 1.0; // rad/s at full rudder and full bite
@@ -26,8 +26,8 @@ const TURN_RESPONSE = 1.5; // per second: how quickly the ship's rate of turn fo
 const RUDDER_CENTER_SNAP = 0.08;
 const RUDDER_CENTER_DETENT = 0.15; // seconds
 // Assisted centring: with no steering input, the rudder drifts back toward amidships at this
-// rate (per second), so hard over takes about 3.3s to straighten. 0 turns the assist off.
-const RUDDER_RETURN_RATE = 0.3;
+// rate (per second), so hard over takes about 1.7s to straighten. 0 turns the assist off.
+const RUDDER_RETURN_RATE = 0.6;
 const MIN_SPEED = 5; // px/s (~1 kn); ships never fully stop, even in irons
 const SAIL_RATE = 0.8; // sails set/furled per second
 const BRACE_RATE = Math.PI / 2; // rad/s the crew can swing the yards
