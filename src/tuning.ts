@@ -39,7 +39,7 @@ export const IRONS_DRAG = 0.4;
 
 // The slowest a ship ever goes, in px/s (5 = 1 kn), even in irons. Keeps a little way on so the
 // rudder always has some bite and a stalled ship can always be steered out.
-export const MIN_SPEED = 5;
+export const MIN_SPEED = 9; //raising from 5
 
 // How fast W/S raise or furl the sails (fraction of full sail per second). 0.8 = empty to full
 // in about 1.25s.
@@ -77,11 +77,11 @@ export const RUDDER_BITE_CURVE = 0.5;
 // (per second). 0.6 = hard over back to centre in about 1.7s. Higher = the ship straightens
 // quickly after you let go (less overshoot); lower = she holds her arc longer. 0 = the rudder
 // stays wherever you leave it.
-export const RUDDER_RETURN_RATE = 0.6;
+export const RUDDER_RETURN_RATE = 0.0; //was 0.6 testing none
 
 // Centre snap: moving toward amidships (by key or by the assisted return), once the rudder is
 // within this much of 0 it snaps to exactly 0. Bigger = easier to land on centre.
-export const RUDDER_CENTER_SNAP = 0.08;
+export const RUDDER_CENTER_SNAP = 0.05; //lowering from 0.8
 
 // After snapping to centre while a key is still held, the rudder rests there this many seconds
 // before carrying on to the other side. Makes a tap stop at centre; 0 = no pause.
